@@ -1,0 +1,12 @@
+apiVersion: v2
+name: linehaul-transportation
+description: Linehaul Transportation - pickup and linehaul departures, loads and volume forecasts; consumes node-topology, order-sourcing and shipping-and-tracking events and publishes its own on the outbox relay
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/IQVO/linehaul-transportation
+keywords:
+  - ddd
+  - hexagonal-architecture
+  - logistics
+  - golang

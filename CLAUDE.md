@@ -38,4 +38,4 @@ Aggregates, invariants and assumptions A1-A30 are in docs/adr/0002; outbox/relay
 
 ## Workflow
 GitFlow: feature/* -> PR into develop, CI green before merge, never push develop or main. lefthook: pre-commit fmt/vet/lint, pre-push `make check`. Commit and push after each step.
-Open follow-up: the Helm chart (docs/before-first-release.md rows 5-9).
+Deploy: `charts/linehaul-transportation` (api only; refuses to render without database, `kafka.brokers` and the three `config.*ConsumerGroup`; grace period must exceed drain delay + 20 s; `helm lint`/`ct lint`, `tests/render_test.sh`, `tests/test_service_selectors.py`).

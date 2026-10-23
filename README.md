@@ -76,6 +76,19 @@ go run ./cmd/api                       # listens on :8080 (HTTP_ADDR)
 
 All settings, the probes, the shutdown order and the outbox and dead-letter runbook: [docs/runtime.md](docs/runtime.md).
 
+## Deploy
+
+The Helm chart is `charts/linehaul-transportation` (one `api` Deployment and Service; HPA, Ingress and Gateway API route are off by default).
+It refuses to render without `database.url` or `database.existingSecret`, `kafka.brokers` and the three `config.*ConsumerGroup` values:
+
+```sh
+helm template linehaul-transportation charts/linehaul-transportation -f charts/linehaul-transportation/ci/default-values.yaml
+bash charts/linehaul-transportation/tests/render_test.sh
+python3 charts/linehaul-transportation/tests/test_service_selectors.py
+```
+
+Chart values, hardening and the grace-period rule: [docs/runtime.md](docs/runtime.md#deployment-helm-chart).
+
 ## Develop
 
 | Command | What it runs |

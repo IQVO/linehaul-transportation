@@ -33,6 +33,28 @@ On SIGINT/SIGTERM: `/readyz` flips to 503 `not_ready`, wait `SHUTDOWN_DRAIN_DELA
 (10 s), close the pool and the Kafka clients. If a worker returns on its own the process exits non-zero so the orchestrator restarts it.
 The grace period of a pod must exceed the sum of these bounds (5 + 10 + 10 s).
 
+## Deployment (Helm chart)
+
+`charts/linehaul-transportation` deploys `cmd/api` as a single `api` Deployment with a Service, a ConfigMap, a Secret (or your own via
+`database.existingSecret`) and a ServiceAccount; the HPA (`autoscaling.api.enabled`), Ingress and Gateway API HTTPRoute
+(`gatewayApi.enabled`) are optional and off by default. There is no MCP, frontend, projector or reports component.
+
+- **Mandatory values** (the render fails and names them): `database.url` or `database.existingSecret`, `kafka.brokers`,
+  `config.nodeTopologyConsumerGroup`, `config.orderSourcingConsumerGroup`, `config.shippingAndTrackingConsumerGroup`. A consumer group must be
+  stable and service-prefixed; empty, blank and pod-derived ids are refused.
+- **Env mapping**: every variable in the table above has a `config.*` / `database.*` / `kafka.brokers` value and is always rendered, with the
+  binary's defaults (`OUTBOX_RELAY_INTERVAL` 1s, `OUTBOX_MAX_ATTEMPTS` 20, `GENERATE_INTERVAL` 1h, `PACKAGES_PER_ORDER` 1,
+  `SHUTDOWN_DRAIN_DELAY` 5s). `extraEnv` may not set a `*_MODE` variable or any variable that has a dedicated value.
+- **Secrets**: `DATABASE_URL` is a `secretKeyRef` (key `database.existingSecretKey`); `MIGRATIONS_DATABASE_URL` is a `secretKeyRef` with
+  `optional: true` (key `database.migrationsExistingSecretKey`), so the binary falls back to `DATABASE_URL` when the key is absent. No DSN is
+  ever in the ConfigMap.
+- **Hardening**: `runAsNonRoot` (uid 1000), `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `drop: [ALL]`, seccomp
+  `RuntimeDefault`, no service-account token. Probes: startup and liveness `/healthz`, readiness `/readyz`.
+- **Grace period**: `terminationGracePeriodSeconds` (default 40) must exceed `SHUTDOWN_DRAIN_DELAY` + 10 s HTTP drain + 10 s workers drain. The
+  chart reads the drain delay as plain seconds or a number with `s`, `ms` or `m`, and refuses other forms.
+- **Tests**: `charts/linehaul-transportation/tests/render_test.sh` and `test_service_selectors.py` (CI job `chart-tests`; `helm-lint` runs
+  `ct lint` on pull requests). The release job packages `linehaul-transportation-<version>.tgz`.
+
 ## Probes
 
 - `GET /healthz` is liveness: 200 `{"status":"ok"}` while the process serves, even while draining or while a dependency is down.
