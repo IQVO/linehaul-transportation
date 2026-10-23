@@ -5,146 +5,210 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// IdempotencyKeyHeader is the request header a caller must supply on a route
-// wrapped by RequireIdempotencyKey.
+// IdempotencyKeyHeader is the request header a caller must supply on every
+// state-changing route.
 const IdempotencyKeyHeader = "Idempotency-Key"
+
+// IdempotencyReplayedHeader is set to "true" on a response that replays a
+// stored outcome instead of running the operation again.
+const IdempotencyReplayedHeader = "Idempotency-Replayed"
+
+// MaxIdempotencyKeyLength is the longest accepted key (apis/openapi.yaml).
+const MaxIdempotencyKeyLength = 200
+
+// keyTTLInterval is the lifetime of a stored key (a Postgres interval).
+const keyTTLInterval = "24 hours"
 
 // TxBinder returns a child context carrying tx, so the use case's own unit of
 // work (the Postgres adapter's) JOINS the transaction the middleware opened
-// instead of beginning a second one. cmd/ passes the outbound adapter's
-// binder in: adapters never import each other.
+// instead of beginning a second one. cmd/ passes the outbound adapter's binder
+// in: adapters never import each other.
 type TxBinder func(ctx context.Context, tx pgx.Tx) context.Context
 
-// RequireIdempotencyKey is the fleet's transactional Idempotency-Key
-// middleware (the reference implementation is order-management's), applied
-// route by route to a resource-CREATION endpoint (every POST).
+// Idempotency builds the per-route Idempotency-Key middleware. route names the
+// operation ("POST /nodes", "POST /nodes/{nodeId}:activate", ...) and, with the
+// key, is the primary key of idempotency_keys. A nil Idempotency on the Server
+// is refused by NewRouter: there is no unkeyed mode.
+type Idempotency func(route string) func(http.Handler) http.Handler
+
+// RequireIdempotencyKey is the transactional Idempotency-Key middleware factory
+// backed by the idempotency_keys table (migration 0002).
 //
 // The correctness argument in short:
 //
-//   - idempotency_keys.status_code starts NULL and is set by the SAME
-//     transaction that inserted the row, immediately before it commits. A
-//     committed row therefore always carries its outcome: there is no "in
-//     progress" state, no timeout and no retry-later answer.
+//   - The request is identified by (route, key); its fingerprint is
+//     sha256(method, path, body). The same key with the same fingerprint replays
+//     the FIRST response (status and body, header Idempotency-Replayed: true);
+//     the same key with another fingerprint is 422 idempotency-key-reused.
 //   - Two concurrent requests with the same key race on INSERT ... ON CONFLICT
-//     DO NOTHING. Postgres serialises them on the primary-key unique index:
-//     the second statement blocks until the first transaction resolves, so a
-//     reader that sees "0 rows inserted" can rely on the original transaction
-//     being finished. If it rolled back, the blocked insert succeeds instead.
-//   - The wrapped handler runs with the transaction bound into its context
-//     (TxBinder), so the idempotency row, the aggregates and their outbox rows commit
-//     or roll back together.
-//   - Every normal response below 500 is cached, 4xx included: the same key
-//     and body replays the same answer, a different body is 422
-//     idempotency-key-reused. A 5xx or a panic rolls everything back and is
-//     never cached, so the same key can retry the real work.
-func RequireIdempotencyKey(pool *pgxpool.Pool, bind TxBinder) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			key := r.Header.Get(IdempotencyKeyHeader)
-			if key == "" {
-				writeProblem(w, r, idempotencyKeyRequired,
-					"send an Idempotency-Key header with a unique value per logical request")
-				return
-			}
-			body, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes))
-			if err != nil {
-				writeError(w, r, errMalformedRequest)
-				return
-			}
-			_ = r.Body.Close()
-			r.Body = io.NopCloser(bytes.NewReader(body))
-			sum := sha256.Sum256(body)
-			requestHash := hex.EncodeToString(sum[:])
-
-			ctx := r.Context()
-			tx, err := pool.Begin(ctx)
-			if err != nil {
-				writeError(w, r, err)
-				return
-			}
-			tag, err := tx.Exec(ctx, `
-				INSERT INTO idempotency_keys (key, method, path, request_hash)
-				VALUES ($1, $2, $3, $4)
-				ON CONFLICT (key) DO NOTHING
-			`, key, r.Method, r.URL.Path, requestHash)
-			if err != nil {
-				_ = tx.Rollback(ctx)
-				writeError(w, r, err)
-				return
-			}
-			if tag.RowsAffected() == 0 {
-				_ = tx.Rollback(ctx)
-				replayCachedResponse(w, r, pool, key, requestHash)
-				return
-			}
-			runFreshRequest(ctx, w, r, tx, bind, key, next)
-		})
-	}
-}
-
-// replayCachedResponse answers a request whose key already has a committed
-// row: the stored outcome when the body matches, 422 when it does not.
-func replayCachedResponse(w http.ResponseWriter, r *http.Request, pool *pgxpool.Pool, key, requestHash string) {
-	var (
-		storedHash string
-		statusCode *int
-		body       []byte
-		headersRaw []byte
-	)
-	err := pool.QueryRow(r.Context(), `
-		SELECT request_hash, status_code, response_body, response_headers
-		FROM idempotency_keys WHERE key = $1
-	`, key).Scan(&storedHash, &statusCode, &body, &headersRaw)
-	if err != nil {
-		writeError(w, r, err)
-		return
-	}
-	if storedHash != requestHash {
-		writeProblem(w, r, idempotencyKeyReused, "the Idempotency-Key was used with a different request body")
-		return
-	}
-	if statusCode == nil {
-		// Unreachable (a committed row always has its outcome); a defensive
-		// 500 rather than a fabricated response.
-		writeError(w, r, errMissingOutcome)
-		return
-	}
-	copyStoredHeaders(w.Header(), headersRaw)
-	w.WriteHeader(*statusCode)
-	_, _ = w.Write(body)
-}
-
-var errMissingOutcome = errorString("idempotency row committed with no recorded outcome")
-
-type errorString string
-
-func (e errorString) Error() string { return string(e) }
-
-func copyStoredHeaders(dst http.Header, raw []byte) {
-	if len(raw) == 0 {
-		return
-	}
-	var stored http.Header
-	if err := json.Unmarshal(raw, &stored); err != nil {
-		return
-	}
-	for k, vs := range stored {
-		for _, v := range vs {
-			dst.Add(k, v)
+//     DO NOTHING. Postgres serialises them on the primary-key index: the second
+//     statement blocks until the first transaction resolves, so a reader that
+//     sees "0 rows inserted" can rely on the original being finished (and if it
+//     rolled back, the blocked insert succeeds instead and does the work).
+//   - The handler runs inside a SAVEPOINT of that transaction, bound into its
+//     context (TxBinder), so the key, the aggregates and the outbox rows of a
+//     2xx commit together. A 4xx rolls the handler's writes back to the
+//     savepoint but is still stored (a repeat answers the same). A 5xx or a panic
+//     rolls everything back and is never stored, so the same key can retry the
+//     real work.
+//   - Keys live 24 hours. Every keyed write first purges the expired rows
+//     (indexed on created_at); an expired key is simply a new key.
+func RequireIdempotencyKey(pool *pgxpool.Pool, bind TxBinder) Idempotency {
+	return func(route string) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return &keyed{pool: pool, bind: bind, route: route, next: next}
 		}
 	}
 }
 
-// capture records the handler's response so it can be persisted and
-// committed BEFORE anything reaches the client.
+type keyed struct {
+	pool  *pgxpool.Pool
+	bind  TxBinder
+	route string
+	next  http.Handler
+}
+
+func (k *keyed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	key, ok := keyFrom(w, r)
+	if !ok {
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
+	_ = r.Body.Close()
+	if err != nil {
+		writeError(w, r, errMalformedRequest)
+		return
+	}
+	if len(body) > maxBodyBytes {
+		writeError(w, r, errTooLarge)
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	hash := fingerprint(r, body)
+
+	ctx := r.Context()
+	tx, err := k.pool.Begin(ctx)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	fresh, err := k.claim(ctx, tx, key, hash)
+	if err != nil {
+		_ = tx.Rollback(context.WithoutCancel(ctx))
+		writeError(w, r, err)
+		return
+	}
+	if !fresh {
+		_ = tx.Rollback(ctx)
+		k.replay(w, r, key, hash)
+		return
+	}
+	k.runFresh(ctx, w, r, tx, key)
+}
+
+// keyFrom returns the validated Idempotency-Key, or writes the 400 problem.
+func keyFrom(w http.ResponseWriter, r *http.Request) (string, bool) {
+	key := r.Header.Get(IdempotencyKeyHeader)
+	if key == "" {
+		writeProblem(w, r, idempotencyKeyRequired, "send an Idempotency-Key header with a unique value per logical request")
+		return "", false
+	}
+	if len(key) > MaxIdempotencyKeyLength || hasControl(key) {
+		writeProblem(w, r, idempotencyKeyInvalid, "the Idempotency-Key must be at most 200 printable characters")
+		return "", false
+	}
+	return key, true
+}
+
+func hasControl(s string) bool {
+	for _, c := range s {
+		if unicode.IsControl(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// fingerprint identifies the request apart from its key: the method, the path
+// (so the same key on another node is another request) and the body.
+func fingerprint(r *http.Request, body []byte) string {
+	h := sha256.New()
+	h.Write([]byte(r.Method))
+	h.Write([]byte{0})
+	h.Write([]byte(r.URL.EscapedPath()))
+	h.Write([]byte{0})
+	h.Write(body)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// claim purges expired keys and tries to insert this one: true when the key is
+// new, false when a committed row already holds it.
+func (k *keyed) claim(ctx context.Context, tx pgx.Tx, key, hash string) (bool, error) {
+	if _, err := tx.Exec(ctx, `DELETE FROM idempotency_keys WHERE created_at < now() - interval '`+keyTTLInterval+`'`); err != nil {
+		return false, err
+	}
+	tag, err := tx.Exec(ctx, `INSERT INTO idempotency_keys (route, key, request_hash) VALUES ($1, $2, $3) ON CONFLICT (route, key) DO NOTHING`,
+		k.route, key, hash)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// replay answers a request whose key already has a committed row: the stored
+// outcome when the fingerprint matches, 422 when it does not.
+func (k *keyed) replay(w http.ResponseWriter, r *http.Request, key, hash string) {
+	var (
+		storedHash string
+		status     *int
+		body       []byte
+	)
+	err := k.pool.QueryRow(r.Context(),
+		`SELECT request_hash, response_status, response_body FROM idempotency_keys WHERE route = $1 AND key = $2`,
+		k.route, key).Scan(&storedHash, &status, &body)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The row expired between the insert attempt and this read: it is a new key now.
+		writeProblem(w, r, idempotencyKeyReused, "the Idempotency-Key expired while the request was in flight; retry it")
+		return
+	}
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if storedHash != hash {
+		writeProblem(w, r, idempotencyKeyReused, "the Idempotency-Key was used with a different request")
+		return
+	}
+	if status == nil {
+		// Unreachable (a committed row always has its outcome): a defensive 500
+		// rather than a fabricated response.
+		writeError(w, r, errors.New("idempotency row committed with no recorded outcome"))
+		return
+	}
+	w.Header().Set("Content-Type", replayContentType(*status))
+	w.Header().Set(IdempotencyReplayedHeader, "true")
+	w.WriteHeader(*status)
+	_, _ = w.Write(body)
+}
+
+func replayContentType(status int) string {
+	if status >= http.StatusBadRequest {
+		return "application/problem+json"
+	}
+	return "application/json"
+}
+
+// capture records the handler's response so it can be persisted and committed
+// BEFORE anything reaches the client.
 type capture struct {
 	header http.Header
 	code   int
@@ -166,55 +230,72 @@ func (c *capture) Write(b []byte) (int, error) {
 	return c.body.Write(b)
 }
 
-// runFreshRequest handles a genuinely new key: capture the response, persist
+// runFresh handles a genuinely new key: run the handler in a savepoint, record
 // the outcome in the same transaction, commit, and only then write to the
-// real client.
-func runFreshRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, tx pgx.Tx, bind TxBinder, key string, next http.Handler) {
+// client.
+func (k *keyed) runFresh(ctx context.Context, w http.ResponseWriter, r *http.Request, tx pgx.Tx, key string) {
+	finished := false
 	defer func() {
-		if p := recover(); p != nil {
-			_ = tx.Rollback(ctx)
-			panic(p)
+		if !finished {
+			_ = tx.Rollback(context.WithoutCancel(ctx))
 		}
 	}()
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
 	rec := &capture{header: http.Header{}}
-	next.ServeHTTP(rec, r.WithContext(bind(ctx, tx)))
+	func() {
+		defer func() {
+			if p := recover(); p != nil {
+				_ = sp.Rollback(context.WithoutCancel(ctx))
+				panic(p)
+			}
+		}()
+		k.next.ServeHTTP(rec, r.WithContext(k.bind(ctx, sp)))
+	}()
 	if rec.code == 0 {
 		rec.code = http.StatusOK
 	}
 	if rec.code >= http.StatusInternalServerError {
-		// A server failure is never cached: roll everything back so the same
+		// A server failure is never stored: everything rolls back so the same
 		// key can retry the real work.
-		_ = tx.Rollback(ctx)
 		flush(w, rec)
 		return
 	}
-	headers, err := json.Marshal(rec.header)
-	if err != nil {
-		_ = tx.Rollback(ctx)
+	if err := k.settle(ctx, tx, sp, key, rec); err != nil {
 		writeError(w, r, err)
 		return
 	}
-	if _, err := tx.Exec(ctx, `
-		UPDATE idempotency_keys
-		SET status_code = $1, response_body = $2, response_headers = $3, completed_at = now()
-		WHERE key = $4
-	`, rec.code, rec.body.Bytes(), headers, key); err != nil {
-		_ = tx.Rollback(ctx)
-		writeError(w, r, err)
-		return
-	}
-	if err := tx.Commit(ctx); err != nil {
-		writeError(w, r, err)
-		return
-	}
+	finished = true
 	flush(w, rec)
+}
+
+// settle keeps the handler's writes on a success and drops them on a 4xx, then
+// stores the outcome and commits.
+func (k *keyed) settle(ctx context.Context, tx, sp pgx.Tx, key string, rec *capture) error {
+	var err error
+	if rec.code >= http.StatusBadRequest {
+		err = sp.Rollback(ctx)
+	} else {
+		err = sp.Commit(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE idempotency_keys SET response_status = $1, response_body = $2 WHERE route = $3 AND key = $4`,
+		rec.code, rec.body.Bytes(), k.route, key); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // flush copies the captured response onto the real client connection.
 func flush(w http.ResponseWriter, rec *capture) {
-	for k, vs := range rec.header {
+	for name, vs := range rec.header {
 		for _, v := range vs {
-			w.Header().Add(k, v)
+			w.Header().Add(name, v)
 		}
 	}
 	w.WriteHeader(rec.code)

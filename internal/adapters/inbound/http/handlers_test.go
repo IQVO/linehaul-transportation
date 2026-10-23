@@ -258,11 +258,13 @@ func TestAnIdempotencyMiddlewareWrapsEveryPOSTAndNoGET(t *testing.T) {
 		Nodes: store.Nodes(), Lanes: store.Lanes(), Volumes: store.Volumes(), Inbox: store.Inbox(), Outbox: store.Outbox(),
 		Clock: memory.NewClock(t0), IDs: &memory.SequentialIDs{}})
 	var seen []string
-	mw := func(next nethttp.Handler) nethttp.Handler {
-		return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			seen = append(seen, r.Method+" "+r.URL.Path)
-			next.ServeHTTP(w, r)
-		})
+	mw := func(route string) func(nethttp.Handler) nethttp.Handler {
+		return func(next nethttp.Handler) nethttp.Handler {
+			return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+				seen = append(seen, route)
+				next.ServeHTTP(w, r)
+			})
+		}
 	}
 	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc, Idempotency: mw}))
 	defer srv.Close()
@@ -278,5 +280,8 @@ func TestAnIdempotencyMiddlewareWrapsEveryPOSTAndNoGET(t *testing.T) {
 	}
 	if len(seen) != 9 {
 		t.Fatalf("the middleware saw %d requests, want the 9 POSTs: %v", len(seen), seen)
+	}
+	if seen[2] != "POST /departures/{departureId}:cancel" || seen[5] != "POST /loads/{loadId}/packages" {
+		t.Fatalf("the middleware is scoped by the route pattern, saw %v", seen)
 	}
 }

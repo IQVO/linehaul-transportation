@@ -18,6 +18,9 @@ const problemBaseURI = "https://retailnetwork.example/problems/"
 // (bad JSON, unknown field, wrong type).
 var errMalformedRequest = errors.New("request body is not valid JSON for this operation")
 
+// errTooLarge marks a request body above maxBodyBytes (413 request-body-too-large).
+var errTooLarge = errors.New("request body is too large")
+
 // problem is the fixed (status, slug, title) of one error category; the
 // detail comes from the error at write time.
 type problem struct {
@@ -31,6 +34,7 @@ var internalProblem = problem{http.StatusInternalServerError, "internal-error", 
 // Problems the idempotency middleware writes itself, before any use case runs.
 var (
 	idempotencyKeyRequired = problem{http.StatusBadRequest, "idempotency-key-required", "Idempotency-Key header is required"}
+	idempotencyKeyInvalid  = problem{http.StatusBadRequest, "idempotency-key-invalid", "Idempotency-Key is invalid"}
 	idempotencyKeyReused   = problem{http.StatusUnprocessableEntity, "idempotency-key-reused", "Idempotency-Key was already used with a different request"}
 )
 
@@ -42,6 +46,7 @@ var problemCatalogue = []struct {
 	p   problem
 }{
 	{errMalformedRequest, problem{http.StatusBadRequest, "malformed-request", "Malformed request"}},
+	{errTooLarge, problem{http.StatusRequestEntityTooLarge, "request-body-too-large", "Request body is too large"}},
 	{ports.ErrNotFound, problem{http.StatusNotFound, "not-found", "Not found"}},
 	{departure.ErrInvalidDepartureTimes, problem{http.StatusUnprocessableEntity, "invalid-departure-times", "Departure times are invalid"}},
 	{schedule.ErrOverlappingSlots, problem{http.StatusUnprocessableEntity, "overlapping-slots", "Slots of a lane overlap"}},

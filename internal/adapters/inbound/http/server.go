@@ -20,7 +20,7 @@ type Server struct {
 	// Idempotency wraps every POST (the fleet Idempotency-Key middleware, built
 	// by cmd/ over the Postgres pool); the shipped binary always sets it, nil
 	// (handler unit tests) leaves the routes unwrapped.
-	Idempotency func(http.Handler) http.Handler
+	Idempotency Idempotency
 	// Readiness backs GET /readyz: the drain gate plus the Postgres and Kafka
 	// checks (NewReadiness). The shipped binary always builds it with
 	// NewReadiness; nil (handler unit tests) means always ready.
@@ -38,23 +38,29 @@ func NewRouter(s *Server) http.Handler {
 	r.Get("/healthz", handleHealthz)
 	r.Get("/readyz", s.handleReadyz)
 
-	r.Group(func(r chi.Router) {
-		if s.Idempotency != nil {
-			r.Use(s.Idempotency)
-		}
-		r.Post("/lane-schedules", s.handleDefineLaneSchedule)
-		r.Post("/lane-schedules/{laneId}:retire", s.handleRetireLaneSchedule)
-		r.Post("/departures/{departureId}:cancel", s.handleCancelDeparture)
-		r.Post("/departures/{departureId}:change-capacity", s.handleChangeDepartureCapacity)
-		r.Post("/loads", s.handleOpenLoad)
-		r.Post("/loads/{loadId}/packages", s.handleAddPackage)
-		r.Post("/loads/{loadId}:close", s.handleCloseLoad)
-		r.Post("/loads/{loadId}:dispatch", s.handleDispatchLoad)
-		r.Post("/loads/{loadId}:receive", s.handleReceiveLoad)
-	})
+	s.keyed(r, http.MethodPost, "/lane-schedules", s.handleDefineLaneSchedule)
+	s.keyed(r, http.MethodPost, "/lane-schedules/{laneId}:retire", s.handleRetireLaneSchedule)
+	s.keyed(r, http.MethodPost, "/departures/{departureId}:cancel", s.handleCancelDeparture)
+	s.keyed(r, http.MethodPost, "/departures/{departureId}:change-capacity", s.handleChangeDepartureCapacity)
+	s.keyed(r, http.MethodPost, "/loads", s.handleOpenLoad)
+	s.keyed(r, http.MethodPost, "/loads/{loadId}/packages", s.handleAddPackage)
+	s.keyed(r, http.MethodPost, "/loads/{loadId}:close", s.handleCloseLoad)
+	s.keyed(r, http.MethodPost, "/loads/{loadId}:dispatch", s.handleDispatchLoad)
+	s.keyed(r, http.MethodPost, "/loads/{loadId}:receive", s.handleReceiveLoad)
 	r.Get("/departures", s.handleListDepartures)
 	r.Get("/departures/{departureId}", s.handleGetDeparture)
 	return r
+}
+
+// keyed registers a state-changing route behind the Idempotency-Key middleware
+// (scope: the route pattern, e.g. "POST /loads/{loadId}:close"); a nil
+// Idempotency (handler unit tests only) leaves it unwrapped.
+func (s *Server) keyed(r chi.Router, method, pattern string, h http.HandlerFunc) {
+	if s.Idempotency == nil {
+		r.MethodFunc(method, pattern, h)
+		return
+	}
+	r.With(s.Idempotency(method+" "+pattern)).MethodFunc(method, pattern, h)
 }
 
 func handleHealthz(w http.ResponseWriter, _ *http.Request) {

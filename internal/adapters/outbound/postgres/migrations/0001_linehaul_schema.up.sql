@@ -158,21 +158,21 @@ CREATE TABLE processed_events (
     PRIMARY KEY (consumer, event_id)
 );
 
--- idempotency_keys: the fleet Idempotency-Key middleware (the REST POSTs).
--- The middleware INSERTs a bare row inside its own transaction before calling
--- the handler, then UPDATEs it with the outcome and commits, all in ONE
--- transaction shared with the use case's own writes, so a COMMITTED row
--- always has a status_code.
+-- idempotency_keys: the Idempotency-Key middleware of the REST commands. A
+-- repeat of (route, key) with the same request_hash replays the stored
+-- response; a different hash is a conflict. The row is inserted bare inside
+-- the request's own transaction and completed (response_status, response_body)
+-- before that transaction commits, so a committed row always has an outcome.
+-- Rows live 24 hours: every keyed write first runs
+-- DELETE ... WHERE created_at < now() - interval '24 hours'.
 CREATE TABLE idempotency_keys (
-    key              TEXT PRIMARY KEY,
-    method           TEXT        NOT NULL,
-    path             TEXT        NOT NULL,
-    request_hash     TEXT        NOT NULL,
-    status_code      INTEGER,
-    response_body    BYTEA,
-    response_headers JSONB,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    completed_at     TIMESTAMPTZ
+    route           TEXT        NOT NULL,
+    key             TEXT        NOT NULL,
+    request_hash    TEXT        NOT NULL,
+    response_status INTEGER,
+    response_body   BYTEA,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (route, key)
 );
 
 CREATE INDEX idx_idempotency_keys_created_at ON idempotency_keys (created_at);
