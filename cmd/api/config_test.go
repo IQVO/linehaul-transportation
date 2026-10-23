@@ -11,7 +11,8 @@ import (
 func envOf(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 
 func valid() map[string]string {
-	return map[string]string{"DATABASE_URL": "postgres://x", "KAFKA_BROKERS": "k1:9092, k2:9092"}
+	return map[string]string{"DATABASE_URL": "postgres://x", "KAFKA_BROKERS": "k1:9092, k2:9092",
+		"NODE_TOPOLOGY_CONSUMER_GROUP": "lh-node", "ORDER_SOURCING_CONSUMER_GROUP": "lh-order", "SHIPPING_AND_TRACKING_CONSUMER_GROUP": "lh-ship"}
 }
 
 func TestLoadConfigDefaults(t *testing.T) {
@@ -21,7 +22,8 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	if c.httpAddr != ":8080" || c.migrationsURL != "postgres://x" || len(c.brokers) != 2 || c.brokers[1] != "k2:9092" ||
 		c.relayInterval != time.Second || c.outboxMaxAttempts != 20 || c.generateInterval != time.Hour ||
-		c.packagesPerOrder != 1 || c.drainDelay != 5*time.Second || c.logLevel != "info" {
+		c.packagesPerOrder != 1 || c.drainDelay != 5*time.Second || c.logLevel != "info" ||
+		c.nodeTopologyGroup != "lh-node" || c.orderSourcingGroup != "lh-order" || c.shippingGroup != "lh-ship" {
 		t.Fatalf("config = %+v", c)
 	}
 }
@@ -52,6 +54,9 @@ func TestBootErrorsNameTheVariable(t *testing.T) {
 		{"no database", func(m map[string]string) { delete(m, "DATABASE_URL") }, "DATABASE_URL"},
 		{"no brokers", func(m map[string]string) { delete(m, "KAFKA_BROKERS") }, "KAFKA_BROKERS"},
 		{"blank brokers", func(m map[string]string) { m["KAFKA_BROKERS"] = " , " }, "KAFKA_BROKERS"},
+		{"no node-topology group", func(m map[string]string) { delete(m, "NODE_TOPOLOGY_CONSUMER_GROUP") }, "NODE_TOPOLOGY_CONSUMER_GROUP"},
+		{"no order-sourcing group", func(m map[string]string) { delete(m, "ORDER_SOURCING_CONSUMER_GROUP") }, "ORDER_SOURCING_CONSUMER_GROUP"},
+		{"blank shipping group", func(m map[string]string) { m["SHIPPING_AND_TRACKING_CONSUMER_GROUP"] = "  " }, "SHIPPING_AND_TRACKING_CONSUMER_GROUP"},
 		{"bad relay interval", func(m map[string]string) { m["OUTBOX_RELAY_INTERVAL"] = "soon" }, "OUTBOX_RELAY_INTERVAL"},
 		{"negative interval", func(m map[string]string) { m["GENERATE_INTERVAL"] = "-1s" }, "GENERATE_INTERVAL"},
 		{"bad drain delay", func(m map[string]string) { m["SHUTDOWN_DRAIN_DELAY"] = "x" }, "SHUTDOWN_DRAIN_DELAY"},

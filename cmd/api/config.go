@@ -17,6 +17,14 @@ var (
 	errMissingBrokers     = errors.New("KAFKA_BROKERS is required: this context runs on real Kafka (outbox relay, consumers, /readyz)")
 )
 
+// The mandatory consumer group variables, one per consumed producer. A
+// missing one is a boot error naming it, raised before the listener binds.
+const (
+	envNodeTopologyGroup  = "NODE_TOPOLOGY_CONSUMER_GROUP"
+	envOrderSourcingGroup = "ORDER_SOURCING_CONSUMER_GROUP"
+	envShippingGroup      = "SHIPPING_AND_TRACKING_CONSUMER_GROUP"
+)
+
 // Defaults of the optional variables.
 const (
 	defaultHTTPAddr         = ":8080"
@@ -28,16 +36,19 @@ const (
 
 // config is the validated environment.
 type config struct {
-	httpAddr          string
-	databaseURL       string
-	migrationsURL     string
-	brokers           []string
-	relayInterval     time.Duration
-	outboxMaxAttempts int
-	generateInterval  time.Duration
-	packagesPerOrder  int
-	drainDelay        time.Duration
-	logLevel          string
+	httpAddr           string
+	databaseURL        string
+	migrationsURL      string
+	brokers            []string
+	nodeTopologyGroup  string
+	orderSourcingGroup string
+	shippingGroup      string
+	relayInterval      time.Duration
+	outboxMaxAttempts  int
+	generateInterval   time.Duration
+	packagesPerOrder   int
+	drainDelay         time.Duration
+	logLevel           string
 }
 
 // loadConfig validates the environment before anything is opened or bound.
@@ -49,6 +60,14 @@ func loadConfig(env func(string) string) (config, error) {
 	c.migrationsURL = orDefault(env("MIGRATIONS_DATABASE_URL"), c.databaseURL)
 	if c.brokers = splitList(env("KAFKA_BROKERS")); len(c.brokers) == 0 {
 		return config{}, errMissingBrokers
+	}
+	for _, g := range []struct {
+		name string
+		dst  *string
+	}{{envNodeTopologyGroup, &c.nodeTopologyGroup}, {envOrderSourcingGroup, &c.orderSourcingGroup}, {envShippingGroup, &c.shippingGroup}} {
+		if *g.dst = strings.TrimSpace(env(g.name)); *g.dst == "" {
+			return config{}, fmt.Errorf("%s is required: every consumer runs under a stable, service-prefixed consumer group", g.name)
+		}
 	}
 	var err error
 	if c.relayInterval, err = durationVar(env, "OUTBOX_RELAY_INTERVAL", defaultRelayInterval); err != nil {

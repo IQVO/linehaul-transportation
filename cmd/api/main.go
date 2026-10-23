@@ -10,6 +10,9 @@
 //	DATABASE_URL                Postgres DSN (REQUIRED)
 //	MIGRATIONS_DATABASE_URL     direct DSN for the boot migrations (default DATABASE_URL)
 //	KAFKA_BROKERS               comma-separated brokers (REQUIRED: relay, consumers, /readyz)
+//	NODE_TOPOLOGY_CONSUMER_GROUP          consumer group of the node-topology consumer (REQUIRED)
+//	ORDER_SOURCING_CONSUMER_GROUP         consumer group of the order-sourcing consumer (REQUIRED)
+//	SHIPPING_AND_TRACKING_CONSUMER_GROUP  consumer group of the shipping-and-tracking consumer (REQUIRED)
 //	OUTBOX_RELAY_INTERVAL       relay poll interval (Go duration or seconds, default 1s)
 //	OUTBOX_MAX_ATTEMPTS         failures before the relay excludes a row (default 20, 0 = unlimited)
 //	GENERATE_INTERVAL           how often the horizon roll runs (Go duration or seconds, default 1h)
@@ -36,6 +39,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	inboundhttp "github.com/claudioed/linehaul-transportation/internal/adapters/inbound/http"
+	inboundkafka "github.com/claudioed/linehaul-transportation/internal/adapters/inbound/kafka"
 	"github.com/claudioed/linehaul-transportation/internal/adapters/kafka/wire"
 	"github.com/claudioed/linehaul-transportation/internal/adapters/outbound/clock"
 	"github.com/claudioed/linehaul-transportation/internal/adapters/outbound/ids"
@@ -136,14 +140,26 @@ func buildApp(pool *pgxpool.Pool, cfg config, logger *slog.Logger) *app {
 	relay := outboxrelay.NewOutboxRelay(outboxRepo, sink, logger,
 		outboxrelay.WithInterval(cfg.relayInterval),
 		outboxrelay.WithMaxAttempts(cfg.outboxMaxAttempts))
+	consumers := inboundkafka.NewConsumers(cfg.brokers, inboundkafka.Groups{
+		NodeTopology: cfg.nodeTopologyGroup, OrderSourcing: cfg.orderSourcingGroup, Shipping: cfg.shippingGroup,
+	}, service, logger)
+	workers := []worker{
+		{name: "outbox relay", run: relay.Run},
+		{name: "horizon roll", run: horizonRoll(service, cfg.generateInterval, logger)},
+	}
+	for _, c := range consumers {
+		workers = append(workers, worker{name: c.Name, run: c.Run})
+	}
 	return &app{
 		service:     service,
 		brokerCheck: outboundkafka.NewBrokerCheck(cfg.brokers),
-		workers: []worker{
-			{name: "outbox relay", run: relay.Run},
-			{name: "horizon roll", run: horizonRoll(service, cfg.generateInterval, logger)},
+		workers:     workers,
+		close: func() {
+			_ = sink.Close()
+			for _, c := range consumers {
+				_ = c.Close()
+			}
 		},
-		close: func() { _ = sink.Close() },
 	}
 }
 
