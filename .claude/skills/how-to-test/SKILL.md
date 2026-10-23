@@ -3,8 +3,6 @@ name: how-to-test
 description: Write or review tests and diagnose a failing coverage, mutation, bdd or integration CI job: the four test layers, the 90% gate, gremlins threshold semantics, the testcontainers rule. Use when adding tests, killing a surviving mutant, or fixing a red check.
 ---
 
-<!-- TEMPLATE NOTE (warehouse-harness-template v2): adapt every repo-specific example in this file (file paths, type names, field names) to THIS repo real code. Do not copy-paste verbatim. -->
-
 # How to test
 
 Use when writing or reviewing tests in this repo, or diagnosing a failing
@@ -13,23 +11,23 @@ bar is layered — passing `go test` is necessary but is the WEAKEST signal
 of the four; mutation testing exists specifically because green tests can
 assert nothing.
 
-## The four layers, in order of what they actually prove
+## The layers, in order of what they prove
 
-1. **Unit tests** (`go test ./...`) — prove the code runs without
-   panicking and returns SOMETHING. Table-driven, in-memory adapters only
-   (`internal/adapters/outbound/memory/`), never a real network/DB call.
-2. **Coverage** (`make coverage`, 90% gate on
-   `./internal/domain/...,./internal/application/...`) — proves lines
-   executed. Proves nothing about whether the test asserted the right
-   thing.
-3. **Mutation testing** (`make mutation-fast`, gremlins) — proves the
-   tests actually ASSERT, not merely execute. A mutant is a deliberately
-   broken version of the code (`<` -> `<=`, `+` -> `-`, etc.); if the test
-   suite still passes against the mutant, it "survived" (LIVED) — meaning
-   no test would catch that exact bug in production. This is the sensor
-   most worth understanding deeply; the pitfalls below are all about it.
-4. **BDD / behaviour** (`make bdd`, godog) — proves the use case works
-   end-to-end through the real HTTP surface, not through a mocked port.
+1. **Domain and use-case unit tests** (`go test ./...`): table-driven, one row per invariant and per legal and illegal transition
+   (`internal/domain/*/*_test.go`, `internal/application/usecases/*_test.go`). Use cases run over the memory test doubles in
+   `internal/adapters/outbound/memory`; never a real network or database call.
+2. **Coverage** (`make coverage`, 90% gate over `./internal/domain/...` and `./internal/application/...`): proves lines ran, not that anything
+   was asserted.
+3. **Mutation** (`make mutation`, gremlins, one run per `internal/domain/<pkg>`): proves the tests assert. A survivor (LIVED) is a bug no test
+   would catch.
+4. **Behaviour** (`make bdd`, godog): `features/*.feature` with steps in `features/steps_*_test.go`; the runner is `features/features_test.go`
+   (never at the repo root). The scenarios drive the use cases and name refusals by problem slug.
+5. **Adapter tests**: the HTTP adapter with `httptest` (`internal/adapters/inbound/http/handlers_test.go`), the encoders with golden exact JSON
+   (`internal/adapters/kafka/wire/wire_test.go`), the consumers' handlers and run loop (`internal/adapters/inbound/kafka/*_test.go`), the relay
+   over a fake store (`internal/adapters/outbound/outbox/relay_test.go`).
+6. **Integration** (`make integration`, build tag `integration`, needs Docker): the same repository suite
+   (`internal/adapters/outbound/repocontract`) on Postgres, the relay against Postgres + Kafka, the Idempotency middleware, the consumers, and
+   the real-wiring test `cmd/api/e2e_integration_test.go`.
 
 ## Mutation testing: `<=` fails, not `>=`
 
@@ -104,7 +102,7 @@ test per technology enforces it (`TestKafkaIntegrationTestsUseTestcontainers`,
 `TestPostgresIntegrationTestsUseTestcontainers`). Share one container per
 package through a helper (e.g. an `outboxDB(t)` that runs
 `tcpostgres.Run` -> `ConnectionString` -> migrate -> pool -> `t.Cleanup`). See
-`internal/adapters/outbound/facilitycache/consumer_integration_test.go`
+`internal/adapters/inbound/kafka/consumers_integration_test.go`
 for the working recipe (unique topic per test, one shared container per
 package, explicit `CreateTopics` + poll for the partition leader before
 the first read/write).

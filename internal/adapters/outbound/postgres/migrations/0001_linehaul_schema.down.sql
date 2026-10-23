@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS idempotency_keys;
+DROP TABLE IF EXISTS processed_events;
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS expected_volumes;
+DROP TABLE IF EXISTS lane_views;
+DROP TABLE IF EXISTS node_views;
+DROP TABLE IF EXISTS load_packages;
+DROP TABLE IF EXISTS loads;
+DROP TABLE IF EXISTS lane_schedules;
+DROP TABLE IF EXISTS departures;

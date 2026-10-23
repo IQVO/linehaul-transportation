@@ -22,10 +22,13 @@ unleash:
     # gremlins fails when the measured value is <= the threshold
     # (internal/report/report.go in gremlins itself), so a threshold must
     # sit strictly BELOW the number this repo can meet today. Measure
-    # first (`make mutation-full`), THEN set these -- don't guess/copy a
+    # first (`make mutation`), THEN set these -- don't guess/copy a
     # sibling repo's numbers, every domain layer's mutant survivability
     # differs. See HARNESS.md's mutation-testing section for the
     # tagless-switch-under-reports pitfall before assuming a low number
     # means missing tests.
-    efficacy: "0"
-    mutant-coverage: "0"
+    # Measured with `make mutation` (single worker): shared 32/32, network 55/55, departure 59/59,
+    # schedule 73/73, load 35/35, volume 47/47 killed (efficacy 100 %, mutator coverage 100 % in each).
+    # Set strictly below the measurement and the same for every package.
+    efficacy: "90"
+    mutant-coverage: "90"
