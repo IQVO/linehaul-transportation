@@ -3,8 +3,6 @@ name: how-to-write-an-adr
 description: Write an Architecture Decision Record in this repo's numbering and format, including companion ADRs for cross-repo changes. Use when a design decision should be recorded or a change contradicts an existing ADR.
 ---
 
-<!-- TEMPLATE NOTE (warehouse-harness-template v2): adapt every repo-specific example in this file (file paths, type names, field names) to THIS repo real code. Do not copy-paste verbatim. -->
-
 # How to write an ADR
 
 Use when a change is architecturally significant — a new bounded-context
@@ -15,66 +13,37 @@ addition inside an already-decided architecture doesn't.
 
 ## Numbering and location
 
-`docs/docs/adr/NNNN-kebab-case-title.md`, four-digit zero-padded,
-sequential — check the highest existing number
-(`git ls-tree --name-only origin/develop -- docs/docs/adr/` and pick the
-next integer, never reuse or guess). `docs/docs/adr/about.md` explains the
-format to readers; you don't need to touch it when adding a new ADR.
+`docs/adr/NNNN-kebab-case-title.md`, four-digit zero-padded, sequential: check the highest existing number in `docs/adr/` and take the next
+integer, never reuse or guess. Add a row to `docs/adr/index.md` in the same commit. The CloudEvents type catalogue ADR
+(`0004-cloudevents-envelope-and-type-catalogue.md`) must change in the SAME commit as `apis/asyncapi.yaml` (`TestEventCatalogueMatchesContract`).
 
-## Frontmatter (Docusaurus needs all five fields)
-
-```yaml
----
-id: NNNN-kebab-case-title
-slug: /adr/NNNN-kebab-case-title
-title: "NN. Title (a short noun phrase, matching the heading)"
-sidebar_label: "NN. Short label for the nav sidebar"
-sidebar_position: NN
-description: "One or two sentences — this shows up in search and link
-  previews, so make it stand alone without the rest of the doc."
----
-```
-
-`id`/`slug` are the full kebab-case filename (minus `.md`); `title`/
-`sidebar_label` repeat the number as plain text (`"13. ..."`, not `#13`);
-`sidebar_position` is the bare integer. Getting these inconsistent is the
-most common cause of a broken sidebar entry or 404 after merge — verify
-by running the docs build (see below) before opening the PR.
-
-## Format: Michael Nygard's template
+## Format
 
 ```markdown
-# NNNN. Title (a short noun phrase)
+# ADR NNNN: title (a short noun phrase)
 
 ## Status
-Accepted | Proposed | Deprecated | Superseded by ADR-XXXX
+
+Accepted (YYYY-MM-DD).   <!-- or Superseded by ADR MMMM -->
 
 ## Context
-The forces at play — technical, business, constraints — that make this
-decision necessary. Write in the past tense, as if explaining to someone
-who wasn't there. State the alternatives seriously considered, not just
-the one chosen; a reader six months from now needs to know a simpler
-option was weighed and rejected, not assume nobody thought of it.
+
+The forces: what the model or contract says, what is unclear, what constraint applies.
 
 ## Decision
-What was actually decided, stated as an active, present-tense
-declaration ("we will...", not "we might..."). Be specific about the
-mechanism, not just the intent — this section should let a reader
-implement the same decision from scratch without asking follow-up
-questions.
+
+Numbered, specific, naming files, types, variables and error names, so a reader can find each decision in the code.
 
 ## Consequences
-What becomes easier, what becomes harder, and what future work this
-creates or forecloses. Be honest about the downsides — an ADR that only
-lists benefits reads as marketing, not a decision record.
+
+What becomes easier, what becomes harder, and what future work this creates or forecloses. Be honest about the downsides: an ADR that
+only lists benefits reads as marketing, not a decision record.
 ```
 
-The `## Decision` section is the part worth the most editing effort: see
-ADR-0013 (`docs/docs/adr/0013-location-classification-via-facility-events.md`)
-for a model example — it states the exact mechanism (event-fed local
-cache replacing a synchronous HTTP read), names the readiness-gate design,
-and is specific enough that Task "how-to-add-an-integration-event"'s
-consumer-group guidance can point straight at it.
+The `## Decision` section is the part worth the most editing effort: see ADR 0007 (`docs/adr/0007-kafka-consumers-inbox-and-dead-letters.md`)
+for a model example. It states the exact mechanism, names the files and variables, and is specific enough that the how-to-add-an-integration-event
+skill can point straight at it. Where the retail-network model is silent, record the reading as a numbered assumption in ADR 0002 (A31, ...)
+and list it under `model_gaps`.
 
 ## Superseding an earlier ADR
 
@@ -94,17 +63,11 @@ split of responsibility — see facility-layout's ADR-0016/0017 pair. Don't
 write the decision once in one repo and expect the other repo's readers
 to find it; each bounded context's docs site is read independently.
 
-## After writing: regenerate and verify the docs build
+## After writing: verify
 
 ```bash
-cd docs
-npm ci
-npm run build   # onBrokenLinks / onBrokenAnchors are both 'throw' — this
-                 # WILL fail if the frontmatter/slug is wrong or a
-                 # cross-reference link is broken
+python3 scripts/harness/repo_lint.py && python3 scripts/harness/guide_lint.py
+go test ./internal/architecture/ -count=1    # the catalogue sensor reads ADR 0004
 ```
 
-A broken ADR link or malformed frontmatter fails the build with a clear
-Docusaurus error, not a silent 404 — always run this locally before
-opening the PR; several repos in this fleet gate this in CI
-(`docs-api-drift`/dedicated docs build job) but not all yet.
+Every path an ADR or guide cites must exist: the guide lint fails on a stale reference.
