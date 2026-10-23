@@ -1,0 +1,1470 @@
+asyncapi: 3.0.0
+info:
+  title: linehaul-transportation Domain Events
+  version: 1.0.0
+  contact:
+    name: linehaul-transportation maintainers
+    url: https://github.com/IQVO/linehaul-transportation
+    email: linehaul-transportation@iqvo.example.com
+  license:
+    name: UNLICENSED
+  tags:
+  - name: linehaul-transportation
+    description: The linehaul-transportation bounded context (retail network, logistics tier).
+  - name: departure
+    description: Events raised by the Departure aggregate.
+  - name: load
+    description: Events raised by the Load aggregate.
+  - name: consumed
+    description: Events this context consumes from node-topology, order-sourcing and shipping-and-tracking.
+  description: |-
+    Event catalog for the **linehaul-transportation** bounded context of the retail network (logistics tier): the middle mile. It turns lane schedules and the declared cutoffs of vendor nodes into scheduled departures, keeps each departure's remaining capacity, builds loads of packages onto departures and reports when loads depart and arrive (ADR 0001, ADR 0002).
+
+    **Published.** Ten events through a **transactional outbox** (the aggregate rows and the already-encoded events are written in ONE database transaction; an always-on relay drains them to Kafka, at-least-once, the CloudEvents `id` is stored with the outbox row). Seven are integration events on `retailnetwork.linehaul-transportation.events`; DepartureDeparted, DepartureArrived and LoadClosed are analytics-only and go ONLY to `retailnetwork.linehaul-transportation.analytics`. BookingMoved and BookingFailed are the events of gap G14 (contracts-delta E13); `departureKind` and `nodeType` on LoadDeparted and LoadArrived are gap G3 (E3). The types are catalogued in ADR 0004.
+
+    **Consumed.** Thirteen events from three topics, each under its own mandatory consumer group, idempotent on the CloudEvents `id` (inbox), dispatched on the full `type`, decoded tolerantly (ADR 0003).
+
+    **Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka header `content-type: application/cloudevents+json; charset=UTF-8`. `specversion`, `id`, `source` (`/retailnetwork/linehaul-transportation`), `type`, `subject` (the aggregate root id), `time`, `datacontenttype` (`application/json`) and `dataschema` (`urn:retailnetwork:linehaul-transportation:<events|analytics>:<EventName>:v1`) are all required. Kafka key = the subject, so one aggregate's events stay ordered on one partition. Type = `com.retailnetwork.logistics.linehaul-transportation.<entity>.<EventName>` with entity `departure` or `load`. A breaking payload change is a new `.v2` type, never a mutation.
+
+    **Conventions.** `data` is camelCase; instants are RFC 3339 UTC; ids are strings; optional fields are omitted when absent (never null); arrays are always present.
+servers:
+  production:
+    host: '{brokers}'
+    protocol: kafka
+    description: Retail-network Kafka broker (host supplied by the deployment environment via KAFKA_BROKERS).
+    variables:
+      brokers:
+        default: kafka.retail-network.internal:9092
+defaultContentType: application/cloudevents+json
+channels:
+  linehaulEvents:
+    address: retailnetwork.linehaul-transportation.events
+    title: linehaul-transportation integration topic
+    description: This service's integration topic. Written by the outbox relay; key = subject (departureId or loadId). Every message carries the CloudEvents content-type header. Dispatch on the full `type`, ignore unknown types, dedupe on `id`.
+    messages:
+      DepartureScheduled:
+        $ref: '#/components/messages/DepartureScheduled'
+      DepartureCapacityChanged:
+        $ref: '#/components/messages/DepartureCapacityChanged'
+      DepartureCancelled:
+        $ref: '#/components/messages/DepartureCancelled'
+      LoadDeparted:
+        $ref: '#/components/messages/LoadDeparted'
+      LoadArrived:
+        $ref: '#/components/messages/LoadArrived'
+      BookingMoved:
+        $ref: '#/components/messages/BookingMoved'
+      BookingFailed:
+        $ref: '#/components/messages/BookingFailed'
+  linehaulAnalytics:
+    address: retailnetwork.linehaul-transportation.analytics
+    title: linehaul-transportation analytics topic
+    description: 'Analytics-only events (DepartureDeparted, DepartureArrived, LoadClosed): written ONLY to this topic, never to the integration topic. Same envelope; the `dataschema` stream segment is `analytics`.'
+    messages:
+      DepartureDeparted:
+        $ref: '#/components/messages/DepartureDeparted'
+      DepartureArrived:
+        $ref: '#/components/messages/DepartureArrived'
+      LoadClosed:
+        $ref: '#/components/messages/LoadClosed'
+  nodeTopologyEvents:
+    address: retailnetwork.node-topology.events
+    title: node-topology integration topic (consumed)
+    description: 'node-topology''s integration topic. This service keeps the fields it relies on in NodeProfileView and LaneView and ignores unknown fields (Conformist). Consumer group: env `NODE_TOPOLOGY_CONSUMER_GROUP` (mandatory).'
+    messages:
+      NodeRegistered:
+        $ref: '#/components/messages/NodeRegistered'
+      NodeOperationalProfileDeclared:
+        $ref: '#/components/messages/NodeOperationalProfileDeclared'
+      NodeActivated:
+        $ref: '#/components/messages/NodeActivated'
+      NodeSuspended:
+        $ref: '#/components/messages/NodeSuspended'
+      NodeRetired:
+        $ref: '#/components/messages/NodeRetired'
+      LaneOpened:
+        $ref: '#/components/messages/LaneOpened'
+      LaneClosed:
+        $ref: '#/components/messages/LaneClosed'
+  orderSourcingEvents:
+    address: retailnetwork.order-sourcing.events
+    title: order-sourcing integration topic (consumed)
+    description: 'order-sourcing''s integration topic (Customer/Supplier). This service keeps the fields it relies on and ignores unknown fields. Consumer group: env `ORDER_SOURCING_CONSUMER_GROUP` (mandatory).'
+    messages:
+      FulfillmentReleasedToNode:
+        $ref: '#/components/messages/FulfillmentReleasedToNode'
+      FulfillmentReassigned:
+        $ref: '#/components/messages/FulfillmentReassigned'
+      FulfillmentLocked:
+        $ref: '#/components/messages/FulfillmentLocked'
+      FulfillmentCancelled:
+        $ref: '#/components/messages/FulfillmentCancelled'
+  shippingAndTrackingEvents:
+    address: retailnetwork.shipping-and-tracking.events
+    title: shipping-and-tracking integration topic (consumed)
+    description: 'shipping-and-tracking''s integration topic (Conformist). This service keeps the fields it relies on and ignores unknown fields. Consumer group: env `SHIPPING_AND_TRACKING_CONSUMER_GROUP` (mandatory).'
+    messages:
+      LabelIssued:
+        $ref: '#/components/messages/LabelIssued'
+      LabelVoided:
+        $ref: '#/components/messages/LabelVoided'
+operations:
+  publishLinehaulEvents:
+    action: send
+    title: Publish linehaul-transportation integration events
+    summary: Publish the seven integration events through the transactional outbox.
+    description: The service sends DepartureScheduled, DepartureCapacityChanged, DepartureCancelled, LoadDeparted, LoadArrived, BookingMoved and BookingFailed to `retailnetwork.linehaul-transportation.events`. Consumers route on the full `type`.
+    tags:
+    - name: linehaul-transportation
+    channel:
+      $ref: '#/channels/linehaulEvents'
+    messages:
+    - $ref: '#/channels/linehaulEvents/messages/DepartureScheduled'
+    - $ref: '#/channels/linehaulEvents/messages/DepartureCapacityChanged'
+    - $ref: '#/channels/linehaulEvents/messages/DepartureCancelled'
+    - $ref: '#/channels/linehaulEvents/messages/LoadDeparted'
+    - $ref: '#/channels/linehaulEvents/messages/LoadArrived'
+    - $ref: '#/channels/linehaulEvents/messages/BookingMoved'
+    - $ref: '#/channels/linehaulEvents/messages/BookingFailed'
+  publishLinehaulAnalytics:
+    action: send
+    title: Publish linehaul-transportation analytics events
+    summary: Publish the three analytics-only events through the transactional outbox.
+    description: The service sends DepartureDeparted, DepartureArrived and LoadClosed to `retailnetwork.linehaul-transportation.analytics` and to no other topic.
+    tags:
+    - name: linehaul-transportation
+    channel:
+      $ref: '#/channels/linehaulAnalytics'
+    messages:
+    - $ref: '#/channels/linehaulAnalytics/messages/DepartureDeparted'
+    - $ref: '#/channels/linehaulAnalytics/messages/DepartureArrived'
+    - $ref: '#/channels/linehaulAnalytics/messages/LoadClosed'
+  receiveNodeTopologyEvents:
+    action: receive
+    title: Receive the node and lane events that feed NodeProfileView and LaneView
+    summary: Receive the node and lane events that feed NodeProfileView and LaneView.
+    description: 'Reads `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened` and `LaneClosed` (key and subject: nodeId or laneId) under the consumer group read from `NODE_TOPOLOGY_CONSUMER_GROUP`. Dispatch is on the full `type`; every other type is ignored. The CloudEvents `id` is claimed in `processed_events` in the same transaction as the effect (inbox). A pickup departure is (re)generated whenever the node is a vendor fulfillment center, ACTIVE, has a profile and has an OPEN outbound lane; the order of arrival across the topics does not matter.'
+    tags:
+    - name: consumed
+    channel:
+      $ref: '#/channels/nodeTopologyEvents'
+    messages:
+    - $ref: '#/channels/nodeTopologyEvents/messages/NodeRegistered'
+    - $ref: '#/channels/nodeTopologyEvents/messages/NodeOperationalProfileDeclared'
+    - $ref: '#/channels/nodeTopologyEvents/messages/NodeActivated'
+    - $ref: '#/channels/nodeTopologyEvents/messages/NodeSuspended'
+    - $ref: '#/channels/nodeTopologyEvents/messages/NodeRetired'
+    - $ref: '#/channels/nodeTopologyEvents/messages/LaneOpened'
+    - $ref: '#/channels/nodeTopologyEvents/messages/LaneClosed'
+  receiveOrderSourcingEvents:
+    action: receive
+    title: Receive the assignment events that feed ExpectedVolumeView and book pickup capacity
+    summary: Receive the assignment events that feed ExpectedVolumeView and book pickup capacity.
+    description: 'Reads `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked` and `FulfillmentCancelled` (key and subject: assignmentId) under the consumer group read from `ORDER_SOURCING_CONSUMER_GROUP`. Dispatch is on the full `type`; every other type is ignored. `FulfillmentLocked` books one package on the pickup departure (policy BookOnLock) or, when it cannot, rebooks onto the next departure from the same origin and publishes BookingMoved or BookingFailed. The other three only update ExpectedVolumeView: assignments are reassigned and cancelled before LOCKED, so there is nothing to release (gap G15).'
+    tags:
+    - name: consumed
+    channel:
+      $ref: '#/channels/orderSourcingEvents'
+    messages:
+    - $ref: '#/channels/orderSourcingEvents/messages/FulfillmentReleasedToNode'
+    - $ref: '#/channels/orderSourcingEvents/messages/FulfillmentReassigned'
+    - $ref: '#/channels/orderSourcingEvents/messages/FulfillmentLocked'
+    - $ref: '#/channels/orderSourcingEvents/messages/FulfillmentCancelled'
+  receiveShippingAndTrackingEvents:
+    action: receive
+    title: Receive the label events that attach tracking numbers to ExpectedVolumeView
+    summary: Receive the label events that attach tracking numbers to ExpectedVolumeView.
+    description: 'Reads `LabelIssued` and `LabelVoided` (key and subject: labelRef) under the consumer group read from `SHIPPING_AND_TRACKING_CONSUMER_GROUP`. Dispatch is on the full `type`; every other type is ignored. Both only update ExpectedVolumeView, which decides nothing.'
+    tags:
+    - name: consumed
+    channel:
+      $ref: '#/channels/shippingAndTrackingEvents'
+    messages:
+    - $ref: '#/channels/shippingAndTrackingEvents/messages/LabelIssued'
+    - $ref: '#/channels/shippingAndTrackingEvents/messages/LabelVoided'
+components:
+  messages:
+    DepartureScheduled:
+      name: DepartureScheduled
+      title: A departure was scheduled on a lane
+      summary: A departure was scheduled on a lane.
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureScheduled`; stream `events`; subject and key = departureId. Raised by ScheduleDeparture (lane schedule slot or vendor-node cutoff). `kind` PICKUP starts at a vendor fulfillment node, LINEHAUL and AIR follow the lane mode. `cutoffAt <= departsAt < arrivesAt`; no booking after `cutoffAt`. Consumers: delivery-promise, order-sourcing.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: departure
+      payload:
+        $ref: '#/components/schemas/DepartureScheduledEvent'
+      examples:
+      - name: departureScheduled
+        summary: A departure was scheduled on a lane.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c01
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.departure.DepartureScheduled
+          subject: dep-5b1c0e7a
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:events:DepartureScheduled:v1
+          data:
+            departureId: dep-5b1c0e7a
+            laneId: lane-31
+            kind: PICKUP
+            originNodeId: node-0f3a91
+            destinationNodeId: node-sc-02
+            cutoffAt: '2026-10-23T21:00:00Z'
+            departsAt: '2026-10-23T21:00:00Z'
+            arrivesAt: '2026-10-23T23:30:00Z'
+            capacityPackages: 400
+    DepartureCapacityChanged:
+      name: DepartureCapacityChanged
+      title: The booked or total capacity of a departure changed
+      summary: The booked or total capacity of a departure changed.
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCapacityChanged`; stream `events`; subject and key = departureId. Raised by BookCapacity, ReleaseCapacity and ChangeDepartureCapacity. `remainingPackages = capacityPackages - bookedPackages`. Full state, not a delta: consumers keep the latest by the aggregate version order of the Kafka key. Consumers: delivery-promise, order-sourcing.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: departure
+      payload:
+        $ref: '#/components/schemas/DepartureCapacityChangedEvent'
+      examples:
+      - name: departureCapacityChanged
+        summary: The booked or total capacity of a departure changed.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c02
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCapacityChanged
+          subject: dep-5b1c0e7a
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:events:DepartureCapacityChanged:v1
+          data:
+            departureId: dep-5b1c0e7a
+            capacityPackages: 400
+            bookedPackages: 17
+            remainingPackages: 383
+    DepartureCancelled:
+      name: DepartureCancelled
+      title: A scheduled departure was cancelled
+      summary: A scheduled departure was cancelled.
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCancelled`; stream `events`; subject and key = departureId. Raised by CancelDeparture (planner, NodeSuspended or NodeRetired of the origin node, or a revised node profile that no longer declares the cutoff). Assignments booked on it are rebooked: see BookingMoved and BookingFailed. Consumers: delivery-promise, order-sourcing.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: departure
+      payload:
+        $ref: '#/components/schemas/DepartureCancelledEvent'
+      examples:
+      - name: departureCancelled
+        summary: A scheduled departure was cancelled.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c03
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCancelled
+          subject: dep-5b1c0e7a
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:events:DepartureCancelled:v1
+          data:
+            departureId: dep-5b1c0e7a
+            reason: NODE_SUSPENDED
+            cancelledAt: '2026-10-23T14:02:11Z'
+    DepartureDeparted:
+      name: DepartureDeparted
+      title: The trip of a departure left its origin node (analytics only)
+      summary: The trip of a departure left its origin node (analytics only).
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureDeparted`; stream `analytics`; subject and key = departureId. Raised by RecordDeparture, which DispatchLoad performs. Analytics only: written to the analytics topic and to no integration topic.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: departure
+      payload:
+        $ref: '#/components/schemas/DepartureDepartedEvent'
+      examples:
+      - name: departureDeparted
+        summary: The trip of a departure left its origin node (analytics only).
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c04
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.departure.DepartureDeparted
+          subject: dep-5b1c0e7a
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:analytics:DepartureDeparted:v1
+          data:
+            departureId: dep-5b1c0e7a
+            departedAt: '2026-10-23T21:04:30Z'
+    DepartureArrived:
+      name: DepartureArrived
+      title: The trip of a departure reached its destination node (analytics only)
+      summary: The trip of a departure reached its destination node (analytics only).
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureArrived`; stream `analytics`; subject and key = departureId. Raised by RecordArrival, which ReceiveLoad performs. Analytics only: written to the analytics topic and to no integration topic.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: departure
+      payload:
+        $ref: '#/components/schemas/DepartureArrivedEvent'
+      examples:
+      - name: departureArrived
+        summary: The trip of a departure reached its destination node (analytics only).
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c05
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.departure.DepartureArrived
+          subject: dep-5b1c0e7a
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:analytics:DepartureArrived:v1
+          data:
+            departureId: dep-5b1c0e7a
+            arrivedAt: '2026-10-23T23:41:02Z'
+    LoadClosed:
+      name: LoadClosed
+      title: A load was closed (analytics only)
+      summary: A load was closed (analytics only).
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.load.LoadClosed`; stream `analytics`; subject and key = loadId. Raised by CloseLoad. Analytics only: written to the analytics topic and to no integration topic.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: load
+      payload:
+        $ref: '#/components/schemas/LoadClosedEvent'
+      examples:
+      - name: loadClosed
+        summary: A load was closed (analytics only).
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c06
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.load.LoadClosed
+          subject: load-77c1
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:analytics:LoadClosed:v1
+          data:
+            loadId: load-77c1
+            departureId: dep-5b1c0e7a
+            packageCount: 17
+    LoadDeparted:
+      name: LoadDeparted
+      title: A load left its origin node
+      summary: A load left its origin node.
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted`; stream `events`; subject and key = loadId. Raised by DispatchLoad. `departureKind` (PICKUP, LINEHAUL or AIR, gap G3) lets shipping-and-tracking recognise the pickup load whose first scan is the handover; `nodeType` is the type of the node where the load departed (the origin). Consumer: shipping-and-tracking.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: load
+      payload:
+        $ref: '#/components/schemas/LoadDepartedEvent'
+      examples:
+      - name: loadDeparted
+        summary: A load left its origin node.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c07
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted
+          subject: load-77c1
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:events:LoadDeparted:v1
+          data:
+            loadId: load-77c1
+            departureId: dep-5b1c0e7a
+            originNodeId: node-0f3a91
+            trackingNumbers:
+            - BR1000000001
+            - BR1000000002
+            departedAt: '2026-10-23T21:04:30Z'
+            departureKind: PICKUP
+            nodeType: FULFILLMENT_CENTER
+    LoadArrived:
+      name: LoadArrived
+      title: A load reached its destination node
+      summary: A load reached its destination node.
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived`; stream `events`; subject and key = loadId. Raised by ReceiveLoad. `departureKind` (gap G3) and `nodeType`, the type of the node where the load arrived (the destination), let shipping-and-tracking tell an arrival at a station from one at a sort centre. Consumers: shipping-and-tracking, last-mile-delivery.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: load
+      payload:
+        $ref: '#/components/schemas/LoadArrivedEvent'
+      examples:
+      - name: loadArrived
+        summary: A load reached its destination node.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c08
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived
+          subject: load-77c1
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:events:LoadArrived:v1
+          data:
+            loadId: load-77c1
+            departureId: dep-5b1c0e7a
+            destinationNodeId: node-sc-02
+            trackingNumbers:
+            - BR1000000001
+            - BR1000000002
+            arrivedAt: '2026-10-23T23:41:02Z'
+            departureKind: PICKUP
+            nodeType: SORTATION_CENTER
+    BookingMoved:
+      name: BookingMoved
+      title: A booked assignment moved to the next departure from the same origin
+      summary: A booked assignment moved to the next departure from the same origin.
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.BookingMoved`; stream `events`; subject and key = toDepartureId. Gap G14 (contracts-delta E13). Raised when the pickup departure named by FulfillmentLocked cannot hold the booking (cancelled, closed, full or unknown) or a booked departure is cancelled, and the next SCHEDULED departure from the same origin takes it. The node never changes after lock. Subject and key: `toDepartureId`. Consumers: delivery-promise, order-sourcing (re-promise).'
+      contentType: application/cloudevents+json
+      tags:
+      - name: departure
+      payload:
+        $ref: '#/components/schemas/BookingMovedEvent'
+      examples:
+      - name: bookingMoved
+        summary: A booked assignment moved to the next departure from the same origin.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c09
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.departure.BookingMoved
+          subject: dep-8e22f1b0
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:events:BookingMoved:v1
+          data:
+            assignmentId: asg-9d41
+            fromDepartureId: dep-5b1c0e7a
+            toDepartureId: dep-8e22f1b0
+    BookingFailed:
+      name: BookingFailed
+      title: A booked assignment could not be placed on any departure
+      summary: A booked assignment could not be placed on any departure.
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.BookingFailed`; stream `events`; subject and key = departureId. Gap G14 (contracts-delta E13). Raised when the booking cannot be held (`reason`: DEPARTURE_CANCELLED, DEPARTURE_CLOSED, DEPARTURE_FULL or DEPARTURE_UNKNOWN, for `departureId`, the departure the assignment was locked on or booked on) and no later SCHEDULED departure from the same origin has room. Subject and key: `departureId`. Consumers: delivery-promise, order-sourcing (re-promise).'
+      contentType: application/cloudevents+json
+      tags:
+      - name: departure
+      payload:
+        $ref: '#/components/schemas/BookingFailedEvent'
+      examples:
+      - name: bookingFailed
+        summary: A booked assignment could not be placed on any departure.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c10
+          source: /retailnetwork/linehaul-transportation
+          type: com.retailnetwork.logistics.linehaul-transportation.departure.BookingFailed
+          subject: dep-5b1c0e7a
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:linehaul-transportation:events:BookingFailed:v1
+          data:
+            assignmentId: asg-9d41
+            departureId: dep-5b1c0e7a
+            reason: DEPARTURE_CANCELLED
+    NodeRegistered:
+      name: NodeRegistered
+      title: A node was registered (nodeType, operator, timezone are kept)
+      summary: A node was registered (nodeType, operator, timezone are kept).
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeRegistered`. Creates the NodeProfileView row (status PROPOSED). Relied on: `nodeId`, `nodeType`, `operator`, `timezone`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/NodeRegisteredReceived'
+      examples:
+      - name: nodeRegistered
+        summary: A node was registered (nodeType, operator, timezone are kept).
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c11
+          source: /retailnetwork/node-topology
+          type: com.retailnetwork.logistics.node-topology.node.NodeRegistered
+          subject: node-0f3a91
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:node-topology:events:NodeRegistered:v1
+          data:
+            nodeId: node-0f3a91
+            nodeType: FULFILLMENT_CENTER
+            subtype: SORTABLE
+            operator: VENDOR
+            vendorId: vendor-77
+            vendorNodeCode: SP-CAJAMAR-01
+            regionId: region-se
+            timezone: America/Sao_Paulo
+            postalCode: 07750-000
+            countryCode: BR
+    NodeOperationalProfileDeclared:
+      name: NodeOperationalProfileDeclared
+      title: A new operational profile revision of a node (cutoffs, hours, holidays, cap)
+      summary: A new operational profile revision of a node (cutoffs, hours, holidays, cap).
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared`. Replaces the stored profile when `profileRevision` is higher than the stored one. Relied on: `nodeId`, `profileRevision`, `timezone`, `operatingHoursByDay`, `holidays`, `cutoffs`, `throughputCap`. Regenerates the pickup departures of an ACTIVE vendor fulfillment center.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/NodeOperationalProfileDeclaredReceived'
+      examples:
+      - name: nodeOperationalProfileDeclared
+        summary: A new operational profile revision of a node (cutoffs, hours, holidays, cap).
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c12
+          source: /retailnetwork/node-topology
+          type: com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared
+          subject: node-0f3a91
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:node-topology:events:NodeOperationalProfileDeclared:v1
+          data:
+            nodeId: node-0f3a91
+            profileRevision: 3
+            timezone: America/Sao_Paulo
+            operatingHoursByDay:
+              monday:
+                start: 06:00
+                end: '22:00'
+              tuesday:
+                start: 06:00
+                end: '22:00'
+            holidays:
+            - '2026-12-25'
+            handlingTimeMinutes: 240
+            cutoffs:
+            - localTime: '11:00'
+            - localTime: '18:00'
+              days:
+              - monday
+              - tuesday
+              maxOrders: 1200
+            throughputCap:
+              value: 400
+              timeUnit: HOUR
+              unit: ORDER
+            declaredBy: VENDOR
+    NodeActivated:
+      name: NodeActivated
+      title: A node became ACTIVE
+      summary: A node became ACTIVE.
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeActivated`. Sets the status ACTIVE (a re-activation after a suspension starts a new pickup generation) and generates the pickup departures of the horizon. Relied on: `nodeId`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/NodeActivatedReceived'
+      examples:
+      - name: nodeActivated
+        summary: A node became ACTIVE.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c13
+          source: /retailnetwork/node-topology
+          type: com.retailnetwork.logistics.node-topology.node.NodeActivated
+          subject: node-0f3a91
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:node-topology:events:NodeActivated:v1
+          data:
+            nodeId: node-0f3a91
+            activatedAt: '2026-10-22T13:10:00Z'
+    NodeSuspended:
+      name: NodeSuspended
+      title: A node was suspended
+      summary: A node was suspended.
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeSuspended`. Sets the status SUSPENDED and cancels the future SCHEDULED pickup departures of the node (reason NODE_SUSPENDED), rebooking their assignments. Relied on: `nodeId`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/NodeSuspendedReceived'
+      examples:
+      - name: nodeSuspended
+        summary: A node was suspended.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c14
+          source: /retailnetwork/node-topology
+          type: com.retailnetwork.logistics.node-topology.node.NodeSuspended
+          subject: node-0f3a91
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:node-topology:events:NodeSuspended:v1
+          data:
+            nodeId: node-0f3a91
+            reason: fire drill
+            suspendedAt: '2026-10-23T14:00:00Z'
+    NodeRetired:
+      name: NodeRetired
+      title: A node was retired
+      summary: A node was retired.
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeRetired`. Sets the status RETIRED and cancels the future SCHEDULED pickup departures of the node (reason NODE_RETIRED), rebooking their assignments. Relied on: `nodeId`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/NodeRetiredReceived'
+      examples:
+      - name: nodeRetired
+        summary: A node was retired.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c15
+          source: /retailnetwork/node-topology
+          type: com.retailnetwork.logistics.node-topology.node.NodeRetired
+          subject: node-0f3a91
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:node-topology:events:NodeRetired:v1
+          data:
+            nodeId: node-0f3a91
+            retiredAt: '2026-10-23T14:00:00Z'
+    LaneOpened:
+      name: LaneOpened
+      title: A lane was opened
+      summary: A lane was opened.
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.node-topology.lane.LaneOpened`. Creates the LaneView row as OPEN. Relied on: `laneId`, `originNodeId`, `destinationNodeId`, `mode`, `nominalTransitMinutes`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/LaneOpenedReceived'
+      examples:
+      - name: laneOpened
+        summary: A lane was opened.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c16
+          source: /retailnetwork/node-topology
+          type: com.retailnetwork.logistics.node-topology.lane.LaneOpened
+          subject: lane-31
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:node-topology:events:LaneOpened:v1
+          data:
+            laneId: lane-31
+            originNodeId: node-0f3a91
+            destinationNodeId: node-sc-02
+            mode: GROUND
+            nominalTransitMinutes: 150
+    LaneClosed:
+      name: LaneClosed
+      title: A lane was closed
+      summary: A lane was closed.
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.node-topology.lane.LaneClosed`. Marks the LaneView row CLOSED: no new departure is scheduled on it (ErrLaneClosed). Departures already scheduled stay. Relied on: `laneId`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/LaneClosedReceived'
+      examples:
+      - name: laneClosed
+        summary: A lane was closed.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c17
+          source: /retailnetwork/node-topology
+          type: com.retailnetwork.logistics.node-topology.lane.LaneClosed
+          subject: lane-31
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:node-topology:events:LaneClosed:v1
+          data:
+            laneId: lane-31
+            closedAt: '2026-10-23T14:00:00Z'
+    FulfillmentReleasedToNode:
+      name: FulfillmentReleasedToNode
+      title: An assignment was released to a node
+      summary: An assignment was released to a node.
+      description: 'Consumed. `type` = `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode`. Creates or updates the ExpectedVolumeView row (node, planned pickup departure) when `releaseNo` is not older than the stored one. Relied on: `assignmentId`, `releaseNo`, `orderId`, `groupNo`, `nodeId`, `pickupDepartureId`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/FulfillmentReleasedToNodeReceived'
+      examples:
+      - name: fulfillmentReleasedToNode
+        summary: An assignment was released to a node.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c18
+          source: /retailnetwork/order-sourcing
+          type: com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode
+          subject: asg-9d41
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:order-sourcing:events:FulfillmentReleasedToNode:v1
+          data:
+            assignmentId: asg-9d41
+            releaseNo: 1
+            orderId: ord-5521
+            groupNo: 1
+            nodeId: node-0f3a91
+            pickupDepartureId: dep-5b1c0e7a
+            requiredShipBy: '2026-10-23T21:00:00Z'
+            tier: STANDARD
+            lines:
+            - catalogItemId: item-1
+              listingId: lst-1
+              quantity: 1
+    FulfillmentReassigned:
+      name: FulfillmentReassigned
+      title: An assignment moved to another node before lock
+      summary: An assignment moved to another node before lock.
+      description: 'Consumed. `type` = `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned`. Updates the node of the ExpectedVolumeView row and forgets its planned departure. Nothing is released: no booking exists before lock. Relied on: `assignmentId`, `toNodeId`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/FulfillmentReassignedReceived'
+      examples:
+      - name: fulfillmentReassigned
+        summary: An assignment moved to another node before lock.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c19
+          source: /retailnetwork/order-sourcing
+          type: com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned
+          subject: asg-9d41
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:order-sourcing:events:FulfillmentReassigned:v1
+          data:
+            assignmentId: asg-9d41
+            fromNodeId: node-0f3a91
+            toNodeId: node-1b7e20
+            reason: NODE_REFUSED
+            assignmentVersion: 2
+    FulfillmentLocked:
+      name: FulfillmentLocked
+      title: An assignment was locked on its node and pickup departure
+      summary: An assignment was locked on its node and pickup departure.
+      description: 'Consumed. `type` = `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked`. Policy BookOnLock: books one package on `pickupDepartureId`. A repeated lock of the same assignment books nothing twice. Relied on: `assignmentId`, `orderId`, `groupNo`, `nodeId`, `pickupDepartureId`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/FulfillmentLockedReceived'
+      examples:
+      - name: fulfillmentLocked
+        summary: An assignment was locked on its node and pickup departure.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c20
+          source: /retailnetwork/order-sourcing
+          type: com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked
+          subject: asg-9d41
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:order-sourcing:events:FulfillmentLocked:v1
+          data:
+            assignmentId: asg-9d41
+            orderId: ord-5521
+            groupNo: 1
+            nodeId: node-0f3a91
+            pickupDepartureId: dep-5b1c0e7a
+            lockedAt: '2026-10-23T15:20:00Z'
+            lockReason: VENDOR_ACCEPTED
+    FulfillmentCancelled:
+      name: FulfillmentCancelled
+      title: An assignment was cancelled
+      summary: An assignment was cancelled.
+      description: 'Consumed. `type` = `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled`. Marks the ExpectedVolumeView row CANCELLED. Cancellation happens only before LOCKED, so no booking is released (gap G15). Relied on: `assignmentId`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/FulfillmentCancelledReceived'
+      examples:
+      - name: fulfillmentCancelled
+        summary: An assignment was cancelled.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c21
+          source: /retailnetwork/order-sourcing
+          type: com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled
+          subject: asg-9d41
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:order-sourcing:events:FulfillmentCancelled:v1
+          data:
+            assignmentId: asg-9d41
+            orderId: ord-5521
+            groupNo: 1
+            reason: CUSTOMER_CANCELLED
+    LabelIssued:
+      name: LabelIssued
+      title: A shipping label was issued for a package of an assignment
+      summary: A shipping label was issued for a package of an assignment.
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued`. Records the tracking number against the assignment in ExpectedVolumeView. A label for an unknown assignment creates the row (state UNKNOWN). Relied on: `trackingNumber`, `assignmentId`, `packageNo`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/LabelIssuedReceived'
+      examples:
+      - name: labelIssued
+        summary: A shipping label was issued for a package of an assignment.
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c22
+          source: /retailnetwork/shipping-and-tracking
+          type: com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued
+          subject: lbl-31c
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:shipping-and-tracking:events:LabelIssued:v1
+          data:
+            labelRef: lbl-31c
+            trackingNumber: BR1000000001
+            poNumber: PO-1001
+            assignmentId: asg-9d41
+            packageNo: 1
+            tier: STANDARD
+            carrier: NETWORK
+    LabelVoided:
+      name: LabelVoided
+      title: A shipping label was voided (gap G18)
+      summary: A shipping label was voided (gap G18).
+      description: 'Consumed. `type` = `com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided`. Removes the tracking number from ExpectedVolumeView (contracts-delta E16). The booking of the assignment is unchanged. Relied on: `trackingNumber`.'
+      contentType: application/cloudevents+json
+      tags:
+      - name: consumed
+      payload:
+        $ref: '#/components/schemas/LabelVoidedReceived'
+      examples:
+      - name: labelVoided
+        summary: A shipping label was voided (gap G18).
+        payload:
+          specversion: '1.0'
+          id: 3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c23
+          source: /retailnetwork/shipping-and-tracking
+          type: com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided
+          subject: lbl-31c
+          time: '2026-10-23T15:20:00Z'
+          datacontenttype: application/json
+          dataschema: urn:retailnetwork:shipping-and-tracking:events:LabelVoided:v1
+          data:
+            labelRef: lbl-31c
+            trackingNumber: BR1000000001
+            reason: ADDRESS_CHANGED
+  schemas:
+    CloudEventEnvelope:
+      type: object
+      required:
+      - specversion
+      - id
+      - source
+      - type
+      - subject
+      - time
+      - datacontenttype
+      - dataschema
+      - data
+      properties:
+        specversion:
+          type: string
+          const: '1.0'
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+        type:
+          type: string
+        subject:
+          type: string
+          description: 'The aggregate root id: departureId or loadId (published), the producer''s root id (consumed).'
+        time:
+          type: string
+          format: date-time
+        datacontenttype:
+          type: string
+          const: application/json
+        dataschema:
+          type: string
+    NodeType:
+      type: string
+      enum:
+      - FULFILLMENT_CENTER
+      - INBOUND_CROSS_DOCK
+      - RETURNS_CENTER
+      - SORTATION_CENTER
+      - DELIVERY_STATION
+      - AIR_HUB
+    DepartureScheduledEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              departureId:
+                type: string
+              laneId:
+                type: string
+              kind:
+                type: string
+                enum:
+                - PICKUP
+                - LINEHAUL
+                - AIR
+              originNodeId:
+                type: string
+              destinationNodeId:
+                type: string
+              cutoffAt:
+                type: string
+                format: date-time
+              departsAt:
+                type: string
+                format: date-time
+              arrivesAt:
+                type: string
+                format: date-time
+              capacityPackages:
+                type: integer
+                minimum: 0
+            required:
+            - departureId
+            - laneId
+            - kind
+            - originNodeId
+            - destinationNodeId
+            - cutoffAt
+            - departsAt
+            - arrivesAt
+            - capacityPackages
+    DepartureCapacityChangedEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              departureId:
+                type: string
+              capacityPackages:
+                type: integer
+                minimum: 0
+              bookedPackages:
+                type: integer
+                minimum: 0
+              remainingPackages:
+                type: integer
+                minimum: 0
+            required:
+            - departureId
+            - capacityPackages
+            - bookedPackages
+            - remainingPackages
+    DepartureCancelledEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              departureId:
+                type: string
+              reason:
+                type: string
+              cancelledAt:
+                type: string
+                format: date-time
+            required:
+            - departureId
+            - reason
+            - cancelledAt
+    DepartureDepartedEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              departureId:
+                type: string
+              departedAt:
+                type: string
+                format: date-time
+            required:
+            - departureId
+            - departedAt
+    DepartureArrivedEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              departureId:
+                type: string
+              arrivedAt:
+                type: string
+                format: date-time
+            required:
+            - departureId
+            - arrivedAt
+    LoadClosedEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              loadId:
+                type: string
+              departureId:
+                type: string
+              packageCount:
+                type: integer
+                minimum: 0
+            required:
+            - loadId
+            - departureId
+            - packageCount
+    LoadDepartedEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              loadId:
+                type: string
+              departureId:
+                type: string
+              originNodeId:
+                type: string
+              trackingNumbers:
+                type: array
+                items:
+                  type: string
+              departedAt:
+                type: string
+                format: date-time
+              departureKind:
+                type: string
+                enum:
+                - PICKUP
+                - LINEHAUL
+                - AIR
+              nodeType:
+                $ref: '#/components/schemas/NodeType'
+            required:
+            - loadId
+            - departureId
+            - originNodeId
+            - trackingNumbers
+            - departedAt
+            - departureKind
+            - nodeType
+    LoadArrivedEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              loadId:
+                type: string
+              departureId:
+                type: string
+              destinationNodeId:
+                type: string
+              trackingNumbers:
+                type: array
+                items:
+                  type: string
+              arrivedAt:
+                type: string
+                format: date-time
+              departureKind:
+                type: string
+                enum:
+                - PICKUP
+                - LINEHAUL
+                - AIR
+              nodeType:
+                $ref: '#/components/schemas/NodeType'
+            required:
+            - loadId
+            - departureId
+            - destinationNodeId
+            - trackingNumbers
+            - arrivedAt
+            - departureKind
+            - nodeType
+    BookingMovedEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              assignmentId:
+                type: string
+              fromDepartureId:
+                type: string
+              toDepartureId:
+                type: string
+            required:
+            - assignmentId
+            - fromDepartureId
+            - toDepartureId
+    BookingFailedEvent:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              assignmentId:
+                type: string
+              departureId:
+                type: string
+              reason:
+                type: string
+                enum:
+                - DEPARTURE_CANCELLED
+                - DEPARTURE_CLOSED
+                - DEPARTURE_FULL
+                - DEPARTURE_UNKNOWN
+            required:
+            - assignmentId
+            - departureId
+            - reason
+    NodeRegisteredReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              nodeId:
+                type: string
+              nodeType:
+                $ref: '#/components/schemas/NodeType'
+              operator:
+                type: string
+                enum:
+                - NETWORK
+                - VENDOR
+              timezone:
+                type: string
+            required:
+            - nodeId
+            - nodeType
+            - operator
+            - timezone
+    NodeOperationalProfileDeclaredReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              nodeId:
+                type: string
+              profileRevision:
+                type: integer
+                minimum: 1
+              timezone:
+                type: string
+              operatingHoursByDay:
+                type: object
+                additionalProperties:
+                  type: object
+                  required:
+                  - start
+                  - end
+                  properties:
+                    start:
+                      type: string
+                      pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+                    end:
+                      type: string
+                      pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+              holidays:
+                type: array
+                items:
+                  type: string
+                  format: date
+              cutoffs:
+                type: array
+                items:
+                  type: object
+                  required:
+                  - localTime
+                  properties:
+                    localTime:
+                      type: string
+                      pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+                    days:
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                        - monday
+                        - tuesday
+                        - wednesday
+                        - thursday
+                        - friday
+                        - saturday
+                        - sunday
+                    maxOrders:
+                      type: integer
+                      minimum: 1
+              throughputCap:
+                type: object
+                required:
+                - value
+                - timeUnit
+                properties:
+                  value:
+                    type: integer
+                    minimum: 1
+                  timeUnit:
+                    type: string
+                    enum:
+                    - HOUR
+                    - DAY
+            required:
+            - nodeId
+            - profileRevision
+            - timezone
+            - operatingHoursByDay
+            - holidays
+            - cutoffs
+            - throughputCap
+    NodeActivatedReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              nodeId:
+                type: string
+              activatedAt:
+                type: string
+                format: date-time
+            required:
+            - nodeId
+    NodeSuspendedReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              nodeId:
+                type: string
+              reason:
+                type: string
+              suspendedAt:
+                type: string
+                format: date-time
+            required:
+            - nodeId
+    NodeRetiredReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              nodeId:
+                type: string
+              retiredAt:
+                type: string
+                format: date-time
+            required:
+            - nodeId
+    LaneOpenedReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              laneId:
+                type: string
+              originNodeId:
+                type: string
+              destinationNodeId:
+                type: string
+              mode:
+                type: string
+                enum:
+                - GROUND
+                - AIR
+              nominalTransitMinutes:
+                type: integer
+                minimum: 1
+            required:
+            - laneId
+            - originNodeId
+            - destinationNodeId
+            - mode
+            - nominalTransitMinutes
+    LaneClosedReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              laneId:
+                type: string
+              closedAt:
+                type: string
+                format: date-time
+            required:
+            - laneId
+    FulfillmentReleasedToNodeReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              assignmentId:
+                type: string
+              releaseNo:
+                type: integer
+                minimum: 1
+              orderId:
+                type: string
+              groupNo:
+                type: integer
+                minimum: 1
+              nodeId:
+                type: string
+              pickupDepartureId:
+                type: string
+            required:
+            - assignmentId
+            - releaseNo
+            - orderId
+            - groupNo
+            - nodeId
+            - pickupDepartureId
+    FulfillmentReassignedReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              assignmentId:
+                type: string
+              fromNodeId:
+                type: string
+              toNodeId:
+                type: string
+            required:
+            - assignmentId
+            - toNodeId
+    FulfillmentLockedReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              assignmentId:
+                type: string
+              orderId:
+                type: string
+              groupNo:
+                type: integer
+                minimum: 1
+              nodeId:
+                type: string
+              pickupDepartureId:
+                type: string
+              lockedAt:
+                type: string
+                format: date-time
+            required:
+            - assignmentId
+            - orderId
+            - groupNo
+            - nodeId
+            - pickupDepartureId
+    FulfillmentCancelledReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              assignmentId:
+                type: string
+              orderId:
+                type: string
+              groupNo:
+                type: integer
+                minimum: 1
+              reason:
+                type: string
+            required:
+            - assignmentId
+    LabelIssuedReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              labelRef:
+                type: string
+              trackingNumber:
+                type: string
+              assignmentId:
+                type: string
+              packageNo:
+                type: integer
+                minimum: 1
+            required:
+            - trackingNumber
+            - assignmentId
+    LabelVoidedReceived:
+      allOf:
+      - $ref: '#/components/schemas/CloudEventEnvelope'
+      - type: object
+        properties:
+          data:
+            type: object
+            properties:
+              labelRef:
+                type: string
+              trackingNumber:
+                type: string
+              reason:
+                type: string
+            required:
+            - trackingNumber
