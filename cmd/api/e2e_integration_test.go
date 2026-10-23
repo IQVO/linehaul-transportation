@@ -530,24 +530,33 @@ func assertMessage(t *testing.T, msg kafkatest.Message, row outboxRow) {
 	if err != nil {
 		t.Fatalf("%s: %v", row.typ, err)
 	}
+	if !bytes.Equal(msg.Value, row.value) {
+		t.Errorf("%s: the message is not the stored outbox bytes", row.typ)
+	}
+	if !strings.HasPrefix(e.Type(), "com.retailnetwork.logistics.linehaul-transportation.") {
+		t.Errorf("%s: type %q is not in this context's namespace", row.typ, e.Type())
+	}
+	if e.Type() != row.typ || e.ID() != row.eventID || e.Subject() != row.subj || msg.Key != row.subj {
+		t.Errorf("%s: type %q id %q subject %q key %q, want the outbox row %+v", row.typ, e.Type(), e.ID(), e.Subject(), msg.Key, row)
+	}
+	assertAttributes(t, e, row)
+	if len(msg.Headers) != 1 || msg.Headers["content-type"] != cloudevents.MediaType {
+		t.Errorf("%s: headers %v", row.typ, msg.Headers)
+	}
+}
+
+func assertAttributes(t *testing.T, e ce.Event, row outboxRow) {
+	t.Helper()
 	name := row.typ[strings.LastIndex(row.typ, ".")+1:]
 	stream := "events"
 	if row.topic == analyticsTopic {
 		stream = "analytics"
 	}
-	switch {
-	case !bytes.Equal(msg.Value, row.value):
-		t.Errorf("%s: the message is not the stored outbox bytes", row.typ)
-	case !strings.HasPrefix(e.Type(), "com.retailnetwork.logistics.linehaul-transportation."):
-		t.Errorf("%s: type %q is not in this context's namespace", row.typ, e.Type())
-	case e.Type() != row.typ || e.ID() != row.eventID || e.Subject() != row.subj || msg.Key != row.subj:
-		t.Errorf("%s: type %q id %q subject %q key %q, want the outbox row %+v", row.typ, e.Type(), e.ID(), e.Subject(), msg.Key, row)
-	case e.Source() != "/retailnetwork/linehaul-transportation" || e.DataContentType() != "application/json" ||
-		e.DataSchema() != "urn:retailnetwork:linehaul-transportation:"+stream+":"+name+":v1" || e.SpecVersion() != "1.0":
+	if e.Source() != "/retailnetwork/linehaul-transportation" || e.DataContentType() != "application/json" ||
+		e.DataSchema() != "urn:retailnetwork:linehaul-transportation:"+stream+":"+name+":v1" || e.SpecVersion() != "1.0" {
 		t.Errorf("%s: attributes source %q dct %q dataschema %q spec %q", row.typ, e.Source(), e.DataContentType(), e.DataSchema(), e.SpecVersion())
-	case len(msg.Headers) != 1 || msg.Headers["content-type"] != cloudevents.MediaType:
-		t.Errorf("%s: headers %v", row.typ, msg.Headers)
-	case e.Time().IsZero() || e.Time().Location() != time.UTC:
+	}
+	if e.Time().IsZero() || e.Time().Location() != time.UTC {
 		t.Errorf("%s: time %v is not a UTC instant", row.typ, e.Time())
 	}
 }
@@ -588,44 +597,68 @@ func dataOf(t *testing.T, r outboxRow) map[string]any {
 	return data
 }
 
-// assertPayloads checks the data of the events whose shape matters most to the
+// payloads finds the data of the events whose shape matters most to the
 // consumers (contracts-delta E3 and E13).
-func assertPayloads(t *testing.T, byTopic map[string][]outboxRow, w world) {
-	t.Helper()
-	const prefix = "com.retailnetwork.logistics.linehaul-transportation."
-	find := func(typ string, pred func(map[string]any) bool) map[string]any {
-		for _, r := range byTopic[eventsTopic] {
-			if r.typ == prefix+typ {
-				if d := dataOf(t, r); pred(d) {
-					return d
-				}
+type payloads struct {
+	t       *testing.T
+	byTopic map[string][]outboxRow
+}
+
+const eventPrefix = "com.retailnetwork.logistics.linehaul-transportation."
+
+func (p payloads) find(typ string, pred func(map[string]any) bool) map[string]any {
+	p.t.Helper()
+	for _, r := range p.byTopic[eventsTopic] {
+		if r.typ == eventPrefix+typ {
+			if d := dataOf(p.t, r); pred(d) {
+				return d
 			}
 		}
-		t.Errorf("no %s matching the flow", typ)
-		return nil
 	}
-	if d := find("load.LoadDeparted", func(d map[string]any) bool { return str(d, "loadId") == w.pickupLoad }); d != nil {
-		if str(d, "departureKind") != "PICKUP" || str(d, "nodeType") != "FULFILLMENT_CENTER" || str(d, "originNodeId") != "fc-1" || str(d, "departureId") != w.pickup2 {
-			t.Errorf("pickup LoadDeparted data = %v", d)
-		}
-		if tn, _ := d["trackingNumbers"].([]any); len(tn) != 1 || tn[0] != "TRK1" {
-			t.Errorf("pickup LoadDeparted trackingNumbers = %v", d["trackingNumbers"])
-		}
+	p.t.Errorf("no %s matching the flow", typ)
+	return nil
+}
+
+func assertPayloads(t *testing.T, byTopic map[string][]outboxRow, w world) {
+	t.Helper()
+	p := payloads{t: t, byTopic: byTopic}
+	p.pickupDeparted(w)
+	p.lineHaulArrived(w)
+	p.bookingMoved(w)
+	p.departureCancelled(w)
+}
+
+func (p payloads) pickupDeparted(w world) {
+	d := p.find("load.LoadDeparted", func(d map[string]any) bool { return str(d, "loadId") == w.pickupLoad })
+	if d == nil {
+		return
 	}
-	if d := find("load.LoadArrived", func(d map[string]any) bool { return str(d, "loadId") == w.lineLoad }); d != nil {
-		if str(d, "departureKind") != "LINEHAUL" || str(d, "nodeType") != "DELIVERY_STATION" || str(d, "destinationNodeId") != "ds-1" {
-			t.Errorf("line-haul LoadArrived data = %v", d)
-		}
+	if str(d, "departureKind") != "PICKUP" || str(d, "nodeType") != "FULFILLMENT_CENTER" || str(d, "originNodeId") != "fc-1" || str(d, "departureId") != w.pickup2 {
+		p.t.Errorf("pickup LoadDeparted data = %v", d)
 	}
-	if d := find("departure.BookingMoved", func(d map[string]any) bool { return str(d, "assignmentId") == "as-1" }); d != nil {
-		if str(d, "fromDepartureId") != w.pickup1 || str(d, "toDepartureId") != w.pickup2 {
-			t.Errorf("BookingMoved data = %v", d)
-		}
+	if tn, _ := d["trackingNumbers"].([]any); len(tn) != 1 || tn[0] != "TRK1" {
+		p.t.Errorf("pickup LoadDeparted trackingNumbers = %v", d["trackingNumbers"])
 	}
-	if d := find("departure.DepartureCancelled", func(d map[string]any) bool { return str(d, "departureId") == w.pickup1 }); d != nil {
-		if str(d, "reason") != "road closed" {
-			t.Errorf("DepartureCancelled data = %v", d)
-		}
+}
+
+func (p payloads) lineHaulArrived(w world) {
+	d := p.find("load.LoadArrived", func(d map[string]any) bool { return str(d, "loadId") == w.lineLoad })
+	if d != nil && (str(d, "departureKind") != "LINEHAUL" || str(d, "nodeType") != "DELIVERY_STATION" || str(d, "destinationNodeId") != "ds-1") {
+		p.t.Errorf("line-haul LoadArrived data = %v", d)
+	}
+}
+
+func (p payloads) bookingMoved(w world) {
+	d := p.find("departure.BookingMoved", func(d map[string]any) bool { return str(d, "assignmentId") == "as-1" })
+	if d != nil && (str(d, "fromDepartureId") != w.pickup1 || str(d, "toDepartureId") != w.pickup2) {
+		p.t.Errorf("BookingMoved data = %v", d)
+	}
+}
+
+func (p payloads) departureCancelled(w world) {
+	d := p.find("departure.DepartureCancelled", func(d map[string]any) bool { return str(d, "departureId") == w.pickup1 })
+	if d != nil && str(d, "reason") != "road closed" {
+		p.t.Errorf("DepartureCancelled data = %v", d)
 	}
 }
 

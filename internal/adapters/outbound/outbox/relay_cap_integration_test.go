@@ -44,18 +44,7 @@ func TestOutboxRelay_MaxAttempts_PoisonRowExcludedThenGoodRowPublishes(t *testin
 		t.Fatalf("no attempt-cap ERROR expected below the cap, got %v", recs)
 	}
 	failingPasses(t, r, 1)
-	recs := capRecords(t, &logs)
-	if len(recs) != 1 {
-		t.Fatalf("want exactly 1 attempt-cap ERROR record, got %d", len(recs))
-	}
-	if got, _ := recs[0]["outbox_id"].(float64); int64(got) != poisonID {
-		t.Errorf("outbox_id = %v, want %d", recs[0]["outbox_id"], poisonID)
-	}
-	for field, want := range map[string]string{"topic": "test.integration", "event_type": "Poison", "key": "agg-cap-1"} {
-		if recs[0][field] != want {
-			t.Errorf("%s = %v, want %q", field, recs[0][field], want)
-		}
-	}
+	assertCapRecord(t, capRecords(t, &logs), poisonID)
 
 	if published, err := r.RelayOnce(ctx); err != nil || published != 1 {
 		t.Fatalf("pass after the cap: want the good row published, got published=%d err=%v", published, err)
@@ -72,6 +61,22 @@ func TestOutboxRelay_MaxAttempts_PoisonRowExcludedThenGoodRowPublishes(t *testin
 	attempts, lastErr, ok := pgtest.OutboxRowState(t, pool, poisonID)
 	if ok || attempts != 3 || lastErr != "message too large" {
 		t.Fatalf("poison row: attempts=%d last_error=%q published=%v, want 3, the send error, unpublished", attempts, lastErr, ok)
+	}
+}
+
+// assertCapRecord checks the single attempt-cap ERROR record of the poison row.
+func assertCapRecord(t *testing.T, recs []map[string]any, poisonID int64) {
+	t.Helper()
+	if len(recs) != 1 {
+		t.Fatalf("want exactly 1 attempt-cap ERROR record, got %d", len(recs))
+	}
+	if got, _ := recs[0]["outbox_id"].(float64); int64(got) != poisonID {
+		t.Errorf("outbox_id = %v, want %d", recs[0]["outbox_id"], poisonID)
+	}
+	for field, want := range map[string]string{"topic": "test.integration", "event_type": "Poison", "key": "agg-cap-1"} {
+		if recs[0][field] != want {
+			t.Errorf("%s = %v, want %q", field, recs[0][field], want)
+		}
 	}
 }
 
