@@ -29,6 +29,10 @@ const (
 	templateName = "linehaul_template"
 )
 
+// Pool is the pgx pool type, re-exported so integration test files can name it
+// without importing pgx themselves.
+type Pool = pgxpool.Pool
+
 var (
 	once      sync.Once
 	container *tcpostgres.PostgresContainer
@@ -114,11 +118,37 @@ func URL(t *testing.T) string {
 	return url
 }
 
+// EmptyURL returns the DSN of a FRESH database with NO migration applied: the
+// binary under test migrates at boot.
+func EmptyURL(t *testing.T) string {
+	t.Helper()
+	once.Do(start)
+	if startErr != nil {
+		t.Fatalf("start postgres container: %v", startErr)
+	}
+	ctx := context.Background()
+	name := fmt.Sprintf("e_%d", seq.Add(1))
+	if err := adminExec(ctx, `CREATE DATABASE `+name); err != nil {
+		t.Fatalf("create database %s: %v", name, err)
+	}
+	url, err := databaseURL(ctx, name)
+	if err != nil {
+		t.Fatalf("database url: %v", err)
+	}
+	return url
+}
+
 // NewPool returns a pool on a fresh database (migrations applied), closed
 // when the test ends.
-func NewPool(t *testing.T) *pgxpool.Pool {
+func NewPool(t *testing.T) *Pool {
 	t.Helper()
-	pool, err := postgres.NewPool(context.Background(), URL(t))
+	return OpenPool(t, URL(t))
+}
+
+// OpenPool returns a pool on url, closed when the test ends.
+func OpenPool(t *testing.T, url string) *Pool {
+	t.Helper()
+	pool, err := postgres.NewPool(context.Background(), url)
 	if err != nil {
 		t.Fatalf("pool: %v", err)
 	}
