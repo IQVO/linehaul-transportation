@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "linehaul-transportation.fullname" . }}
+  labels:
+    {{- include "linehaul-transportation.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  # component=api: every pod of the release shares name/instance, so the
+  # Service pins the component too (tests/test_service_selectors.py).
+  selector:
+    {{- include "linehaul-transportation.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: api
