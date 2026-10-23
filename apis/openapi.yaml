@@ -67,10 +67,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LaneSchedule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /lane-schedules/{laneId}:retire:
@@ -92,10 +96,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LaneSchedule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
   /departures:
     get:
       tags: [Departures]
@@ -195,10 +205,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Departure'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /departures/{departureId}:change-capacity:
@@ -228,10 +242,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Departure'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /loads:
@@ -259,10 +277,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Load'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /loads/{loadId}/packages:
@@ -295,10 +317,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Load'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /loads/{loadId}:close:
@@ -320,10 +346,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Load'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
   /loads/{loadId}:dispatch:
     post:
       tags: [Loads]
@@ -343,10 +375,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Load'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
   /loads/{loadId}:receive:
     post:
       tags: [Loads]
@@ -367,6 +405,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Load'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -377,11 +417,16 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: Client-chosen key (1 to 128 characters); a replay on the same route with the same key within 24 hours returns the first response.
+      description: >-
+        Client-chosen key (1 to 200 printable characters). A repeat of the same
+        request on the same route with the same key within 24 hours returns the
+        first response (status and body, header Idempotency-Replayed: true); a
+        refusal (4xx) is replayed too, a server failure (5xx) is not stored.
+        The same key with another request is 422 idempotency-key-reused.
       schema:
         type: string
         minLength: 1
-        maxLength: 128
+        maxLength: 200
     LaneId:
       name: laneId
       in: path
@@ -404,6 +449,20 @@ components:
       schema:
         type: string
   responses:
+    BadRequest:
+      description: >-
+        Malformed request. Types: malformed-request (bad JSON, unknown field,
+        NUL character), idempotency-key-required and idempotency-key-invalid.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooLarge:
+      description: Request body above 64 KiB (problem type request-body-too-large).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     NotFound:
       description: Unknown id (problem type not-found).
       content:
@@ -424,8 +483,8 @@ components:
     Unprocessable:
       description: >-
         Validation failure. Types: overlapping-slots (ErrOverlappingSlots),
-        invalid-departure-times (ErrInvalidDepartureTimes) and
-        validation-failed.
+        invalid-departure-times (ErrInvalidDepartureTimes), validation-failed
+        and idempotency-key-reused.
       content:
         application/problem+json:
           schema:
@@ -637,3 +696,7 @@ components:
           type: string
           format: date-time
           description: Present once the load arrived.
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/Unprocessable'

@@ -41,12 +41,15 @@ None of the three is an aggregate; none enforces a rule on its source.
 
 - **Inbox.** Each message is claimed in `processed_events(event_id, consumer)` in the same transaction as its effect; a redelivery
   stops at the claim. The offset is committed after the transaction.
-- **Dispatch on the full `type`**; an unknown type is ignored (claimed and skipped), never an error.
-- **Tolerant decoding.** Unknown fields are ignored; a missing field the handler relies on makes the message deterministic poison.
-- **Poison and failures.** A message that is not a valid CloudEvent, or whose `data` cannot be decoded or misses a required field,
-  goes to the dead-letter topic `retailnetwork.linehaul-transportation.dlq` and is committed. A domain refusal (for example a lock
-  that no departure can hold) is an outcome, not a failure: it publishes BookingFailed and commits. An infrastructure failure
-  rolls back and the message is redelivered.
+- **Dispatch on the full `type`**; a type the consumer has no handler for is ignored (not claimed in the inbox), never an error.
+- **Tolerant decoding.** Unknown fields are ignored; a payload that cannot be decoded, or whose values the use case refuses
+  (`ErrValidation`, for example an id that is not a valid id), is deterministic poison.
+- **Poison and failures.** A message that is not a valid CloudEvent is logged and committed past. Poison (see above) goes at once to
+  the dead-letter topic of the consumed topic, `<consumed topic>.dlq` (for example
+  `retailnetwork.order-sourcing.events.dlq`), with `x-dlq-*` headers, and is committed. A domain refusal that is an outcome is not a
+  failure: a lock that no departure can hold publishes BookingFailed and commits. A transient failure (the transaction rolled back)
+  retries the same message with capped backoff (200 ms doubling to 5 s) up to five attempts, then the message is dead-lettered so
+  one stuck message never wedges the partition (ADR 0007).
 - **Consumer groups are mandatory** and read from the environment at boot; a missing one is a boot error naming the variable.
 - **Ordering across topics** is not assumed: pickups are re-planned whenever any of registration, profile, activation or lane
   arrives, and by the horizon roll (ADR 0002 A6, A7).

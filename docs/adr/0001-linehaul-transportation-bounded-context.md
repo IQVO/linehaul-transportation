@@ -15,10 +15,10 @@ The retail network is modelled as ten bounded contexts, each its own service and
 - A package is on at most one open load at a time.
 - A cancelled departure is announced before its cutoff wherever possible, so promises can be revised.
 - Events use the network CloudEvents namespace `com.retailnetwork.logistics.linehaul-transportation.<entity>.<Event>` on `retailnetwork.linehaul-transportation.events`
-  (analytics-only events on `.analytics`). Published: DepartureScheduled, DepartureCapacityChanged, DepartureCancelled, DepartureDeparted, DepartureArrived, LoadClosed, LoadDeparted, LoadArrived. No `warehouse.*` topic is consumed or produced.
+  (analytics-only events on `.analytics`). Published: DepartureScheduled, DepartureCapacityChanged, DepartureCancelled, DepartureDeparted, DepartureArrived, BookingMoved, BookingFailed, LoadClosed, LoadDeparted, LoadArrived (ADR 0004). No `warehouse.*` topic is consumed or produced.
 - No live REST lookup into sibling contexts except the calls the model lists under `sync_calls`.
 - No authentication on REST, consistent with the fleet. PII exists only in customer-ordering and shipping-and-tracking.
 
 ## Consequences
 
-Relationships and the full consumed-event list are in the model and in the AsyncAPI contract added with the first feature PR.
+Relationships and the consumed events are in ADR 0003; the contracts are `apis/openapi.yaml` and `apis/asyncapi.yaml`; the runtime is described in ADR 0005 to 0007 and `docs/runtime.md`.
