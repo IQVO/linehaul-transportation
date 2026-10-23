@@ -13,6 +13,9 @@ the fleet reference). The chart is NOT generated: it is shaped by what the servi
 `IQVO/pick-face-replenishment` (Kafka consumers, MCP, analytics, frontend) and
 `IQVO/task-interleaving`.
 
+**Status in the retail-network study build.** Done: Dockerfile and `.dockerignore`, real runtime only (row 1), CI mutation, integration and vuln jobs.
+Follow-up, not started: the Helm chart (rows 5-9), the frontend row (no frontend in this service) and the MCP row (none is served).
+
 | # | Item | Done when | Guarded by |
 |---|------|-----------|------------|
 | 1 | **Real runtime only.** `cmd/api` wires Postgres and Kafka; the in-memory adapters (`internal/adapters/outbound/memory`) are test doubles. No `*_MODE`/permissive fallback, no default that boots "healthy" without `DATABASE_URL` or `KAFKA_BROKERS`. | `cmd/**` has no import of the memory package; the binary exits at boot on missing `DATABASE_URL`, `KAFKA_BROKERS` or a consumer group id. | `TestRuntimeBinaryHasNoInMemoryAdapters` (`internal/architecture/runtime_no_memory_fitness_test.go`). The boot-error behaviour has no generic sensor: cover it in `cmd/api` tests and in the chart test (row 8). |
