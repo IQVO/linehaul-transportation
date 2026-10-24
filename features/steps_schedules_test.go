@@ -18,6 +18,7 @@ func registerScheduleSteps(sc *godog.ScenarioContext, w *world) {
 	sc.Step(`^the schedule of "([^"]*)" is retired$`, w.retireSchedule)
 	sc.Step(`^departures are generated$`, w.generate)
 	sc.Step(`^the lane "([^"]*)" has LINEHAUL departures with capacity (\d+)$`, w.laneHasDepartures)
+	sc.Step(`^the lane "([^"]*)" has a LINEHAUL departure with capacity (\d+)$`, w.laneHasADepartureWithCapacity)
 	sc.Step(`^no departure was scheduled by the last command$`, w.nothingScheduled)
 }
 
@@ -81,6 +82,27 @@ func (w *world) laneHasDepartures(laneAlias, capacity string) error {
 		}
 	}
 	return nil
+}
+
+// laneHasADepartureWithCapacity asserts at least one departure of the lane
+// has the capacity (find-by-field, never an index: the departure list is not
+// ordered by insertion).
+func (w *world) laneHasADepartureWithCapacity(laneAlias, capacity string) error {
+	want, _ := strconv.Atoi(capacity)
+	lane, ok := w.lanes[laneAlias]
+	if !ok {
+		return fmt.Errorf("the scenario never opened lane %q", laneAlias)
+	}
+	ds, err := w.departuresOf(lane.Origin, isKind(departure.KindLinehaul))
+	if err != nil {
+		return err
+	}
+	for _, d := range ds {
+		if d.LaneID == laneAlias && d.CapacityPackages == want {
+			return nil
+		}
+	}
+	return fmt.Errorf("lane %s has no LINEHAUL departure with capacity %d", laneAlias, want)
 }
 
 func (w *world) nothingScheduled() error {

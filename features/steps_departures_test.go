@@ -23,6 +23,7 @@ func registerDepartureSteps(sc *godog.ScenarioContext, w *world) {
 	sc.Step(`^the departure "([^"]*)" holds (\d+) booked packages?$`, w.holdsBooked)
 	sc.Step(`^the departure "([^"]*)" is (SCHEDULED|CLOSED|DEPARTED|ARRIVED|CANCELLED)$`, w.departureIs)
 	sc.Step(`^the assignment "([^"]*)" is booked on "([^"]*)"$`, w.bookedOn)
+	sc.Step(`^the assignment "([^"]*)" still holds its booking on "([^"]*)"$`, w.stillHoldsBookingOn)
 	sc.Step(`^the assignment "([^"]*)" is in state "([^"]*)"$`, w.assignmentState)
 }
 
@@ -136,6 +137,19 @@ func (w *world) bookedOn(assignment, alias string) error {
 	}
 	if s.State != volume.StateBooked || string(s.BookedOn) != w.depID(alias) {
 		return fmt.Errorf("assignment %s is %s on %q, want BOOKED on %s (%s)", assignment, s.State, s.BookedOn, alias, w.depID(alias))
+	}
+	return nil
+}
+
+// stillHoldsBookingOn asserts only BookedOn: ADR 0002 A16 keeps the booking
+// of an assignment order-sourcing cancelled (its state is CANCELLED).
+func (w *world) stillHoldsBookingOn(assignment, alias string) error {
+	s, err := w.volumeOf(assignment)
+	if err != nil {
+		return err
+	}
+	if string(s.BookedOn) != w.depID(alias) {
+		return fmt.Errorf("assignment %s holds its booking on %q, want %s (%s)", assignment, s.BookedOn, alias, w.depID(alias))
 	}
 	return nil
 }

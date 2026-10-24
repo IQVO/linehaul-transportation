@@ -81,3 +81,32 @@ Feature: Loads, dispatch and arrival
     Given the departure "H1" is cancelled because "breakdown"
     When I open the load "LD1" on the departure "H1"
     Then the command is refused with "illegal-transition"
+
+  Scenario: Closing a load closes the departure and announces LoadClosed
+    Given I open the load "LD1" on the departure "H1"
+    And the package "TRK1" is added to the load "LD1"
+    When the load "LD1" is closed
+    Then the command succeeds
+    And the departure "H1" is CLOSED
+    And the last command published the event "LoadClosed"
+
+  Scenario: Dispatching a closed load announces DepartureDeparted
+    Given I open the load "LD1" on the departure "H1"
+    And the package "TRK1" is added to the load "LD1"
+    And the load "LD1" is closed
+    And the clock moves to "2026-10-24T00:30:00Z"
+    When I dispatch the load "LD1"
+    Then the command succeeds
+    And the departure "H1" is DEPARTED
+    And the last command published the event "DepartureDeparted"
+
+  Scenario: Receiving a departed load announces DepartureArrived
+    Given I open the load "LD1" on the departure "H1"
+    And the package "TRK1" is added to the load "LD1"
+    And the load "LD1" is closed
+    And the clock moves to "2026-10-24T00:30:00Z"
+    And I dispatch the load "LD1"
+    When I receive the load "LD1"
+    Then the command succeeds
+    And the departure "H1" is ARRIVED
+    And the last command published the event "DepartureArrived"
