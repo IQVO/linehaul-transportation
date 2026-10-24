@@ -38,5 +38,6 @@ func initializeScenario(sc *godog.ScenarioContext) {
 	registerDepartureSteps(sc, w)
 	registerScheduleSteps(sc, w)
 	registerLoadSteps(sc, w)
+	registerAssignmentSteps(sc, w)
 	registerOutcomeSteps(sc, w)
 }
