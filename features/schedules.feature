@@ -44,3 +44,18 @@ Feature: Lane schedules and line-haul departures
     And the lane "ln-2" is closed
     When departures are generated
     Then no departure was scheduled by the last command
+
+  Scenario: Redefining an active schedule replaces its slots
+    Given the schedule of "ln-2" has a slot on "friday" cutoff "20:00" departs "21:00" arrives "23:00" for 100 packages
+    And departures are generated
+    When I define the schedule of "ln-2" with a slot on "saturday" cutoff "10:00" departs "11:00" arrives "13:00" for 50 packages
+    And departures are generated
+    Then the command succeeds
+    And the lane "ln-2" has a LINEHAUL departure with capacity 50
+    And the last command published the event "DepartureScheduled"
+
+  Scenario: A retired schedule cannot be redefined
+    Given the schedule of "ln-2" has a slot on "friday" cutoff "20:00" departs "21:00" arrives "23:00" for 100 packages
+    And the schedule of "ln-2" is retired
+    When I define the schedule of "ln-2" with a slot on "saturday" cutoff "10:00" departs "11:00" arrives "13:00" for 50 packages
+    Then the command is refused with "illegal-transition"
