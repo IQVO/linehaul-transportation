@@ -1,0 +1,34 @@
+# Used by `helm lint` / `ct lint`: every optional value and component set at
+# once (api + mcp + route + frontend + ingress + gateway + HPA).
+database:
+  url: "postgres://u@example.invalid:5432/db"
+kafka:
+  brokers: "kafka.example.invalid:9092"
+config:
+  nodeTopologyConsumerGroup: "linehaul-transportation-node-topology"
+  orderSourcingConsumerGroup: "linehaul-transportation-order-sourcing"
+  shippingAndTrackingConsumerGroup: "linehaul-transportation-shipping-and-tracking"
+ingress:
+  enabled: true
+gatewayApi:
+  enabled: true
+  parentRefs:
+    - name: warehouse-gateway
+      namespace: kong
+      sectionName: http
+  hosts:
+    - path: /api/linehaul-transportation
+      pathType: PathPrefix
+autoscaling:
+  api:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
+frontend:
+  enabled: true

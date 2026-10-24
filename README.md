@@ -59,6 +59,43 @@ key = aggregate id.
 
 Delivery is at-least-once with a stable event id ([ADR 0005](docs/adr/0005-outbox-relay-and-attempt-cap.md)).
 
+## MCP server (read-only)
+
+`cmd/mcp` exposes the same read use cases the REST adapter serves to AI agents over the
+Model Context Protocol ([ADR 0008](docs/adr/0008-mcp-server-adoption.md)): Streamable HTTP at `/mcp` (and `/`), an open `GET /healthz`,
+official Go SDK, **no auth** (fleet decision) and **no writes** — no Kafka, no outbox, no consumers in that binary.
+
+| Tool | Mirrors | What it returns |
+| --- | --- | --- |
+| `list_departures(origin?, destination?, from?, to?, limit?)` | `GET /departures` | the horizon by `cutoffAt`: kind, lane, leg, cutoff/departs/arrives, capacity, booked, remaining, state |
+| `get_departure(departureId)` | `GET /departures/{departureId}` | one departure, plus `cancelReason`/`cancelledAt`/`departedAt`/`arrivedAt` once it ended |
+
+Tool errors carry the REST problem slug (`not-found`, `validation-failed`) as their prefix. The tool set is pinned by tests
+(`internal/adapters/inbound/mcp`) and byte-pinned in its golden registry; adding a tool is an ADR 0008 amendment.
+
+```sh
+export DATABASE_URL=postgres://user:***@localhost:5432/linehaul?sslmode=disable
+go run ./cmd/mcp                            # MCP_ADDR :8090, LOG_LEVEL info
+```
+
+In the cluster: `mcp.enabled=true` on the chart (own Deployment + Service, default off); the Kong route
+`/api/mcp/linehaul-transportation` (rewritten to `/mcp`) is opt-in via `mcp.route.enabled`.
+
+## Web remote (linehaul_mfe)
+
+`web/` is the warehouse-console Module Federation remote `linehaul_mfe` ([ADR 0009](docs/adr/0009-console-remote.md)): a small
+**read-only** React UI over this context's two REST reads — the departure horizon (origin/destination/cutoff-window/limit filters)
+and one departure's detail. It resolves its API base at runtime from the console's `/config.json`
+(`apiOrigin` → `${apiOrigin}/api/linehaul-transportation`), never calls a sibling context, and has no write action.
+
+```sh
+cd web && npm ci && npm run dev              # standalone on :4015 (strictPort)
+cd web && npm run lint && npx tsc -b && npm test && npm run build
+```
+
+In the cluster: `frontend.enabled=true` on the chart (nginx pod, ClusterIP, no env, default off), served by warehouse-infra's
+web gateway at `/mfes/linehaul-transportation/`.
+
 ## Run it
 
 Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS` and the three consumer groups (`NODE_TOPOLOGY_CONSUMER_GROUP`,
@@ -102,8 +139,8 @@ Chart values, hardening and the grace-period rule: [docs/runtime.md](docs/runtim
 | `make vuln` | govulncheck |
 
 Layout: `internal/domain/{shared,departure,schedule,load,network,volume}` (pure Go), `internal/application/{ports,views,usecases,repository,outbox}`,
-`internal/adapters/inbound/{http,kafka}` (chi, consumers), `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`,
-`internal/adapters/kafka/{cloudevents,wire}`, `cmd/api`, `features/` (godog BDD). The `memory` and `repocontract` packages are test doubles; `cmd/**`
+`internal/adapters/inbound/{http,kafka,mcp}` (chi, consumers, read-only MCP server), `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`,
+`internal/adapters/kafka/{cloudevents,wire}`, `cmd/{api,mcp}`, `web/` (the linehaul_mfe remote), `features/` (godog BDD). The `memory` and `repocontract` packages are test doubles; `cmd/**`
 never imports them.
 
 Decisions: [docs/adr/](docs/adr/index.md). Packaging checklist: [docs/before-first-release.md](docs/before-first-release.md).
