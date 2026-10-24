@@ -4,7 +4,7 @@ harness-template: v4
 
 Retail network, bounded context Linehaul Transportation (Supporting, logistics tier). Turns lanes into scheduled departures (a pickup departure at every vendor node cutoff), keeps each departure's remaining capacity, builds loads of packages and reports when loads depart and arrive.
 Consumes node-topology, order-sourcing and shipping-and-tracking events into local read models; calls no sibling at runtime.
-Design source of truth: IQVO/retail-network-docs `model/model.yaml` (context linehaul-transportation). This service belongs to the retail network, not the warehouse-systems fleet.
+Design source of truth: IQVO/warehouse-docs `network/model/model.yaml` (context linehaul-transportation). This service belongs to the retail network, not the warehouse-systems fleet.
 This project is a domain-driven design study, not associated with any company: never name a real company, brand or product in code, comments, ADRs, specs, tests or fixtures (README `## Disclaimer`).
 
 ## Commands

@@ -8,7 +8,7 @@ onto departures, and reports when loads depart and arrive.
 
 This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
 
-The design is proposed in [retail-network-docs](https://iqvo.github.io/retail-network-docs/contexts/linehaul-transportation); `model/model.yaml` there is the single source of truth.
+The design is proposed in [retail-network docs](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation); `model/model.yaml` there is the single source of truth.
 This repository is a service of the retail network, not of the warehouse-systems fleet; the fleet reaches the network only through the
 `vendor-connectivity` Vendor API.
 
