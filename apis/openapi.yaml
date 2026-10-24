@@ -696,7 +696,3 @@ components:
           type: string
           format: date-time
           description: Present once the load arrived.
-        '413':
-          $ref: '#/components/responses/TooLarge'
-        '422':
-          $ref: '#/components/responses/Unprocessable'
