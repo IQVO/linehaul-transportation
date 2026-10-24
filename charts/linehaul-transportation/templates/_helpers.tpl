@@ -182,3 +182,12 @@ Every render-time requirement of the real runtime, in one include.
 {{- include "linehaul-transportation.requireSaneExtraEnv" . -}}
 {{- include "linehaul-transportation.requireGracePeriod" . -}}
 {{- end -}}
+
+{{/*
+Fully qualified name of the optional read-only MCP workload (ADR 0008): its
+own Deployment + Service pair, pinned by app.kubernetes.io/component=mcp
+(tests/test_service_selectors.py).
+*/}}
+{{- define "linehaul-transportation.mcpFullname" -}}
+{{- include "linehaul-transportation.fullname" . }}-mcp
+{{- end -}}
