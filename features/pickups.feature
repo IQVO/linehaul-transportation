@@ -46,3 +46,11 @@ Feature: Pickup departures at vendor nodes
     Given the node "fc-1" is activated
     When the profile of "fc-1" is revised to revision 1 with no cutoff
     Then the node "fc-1" has pickup departures toward "sc-1"
+
+  Scenario: The horizon roll keeps generating pickups
+    Given the node "fc-1" is activated
+    And the clock moves to "2026-11-06T12:00:00Z"
+    When departures are generated
+    Then the command succeeds
+    And the node "fc-1" has pickup departures toward "sc-1"
+    And the last command published the event "DepartureScheduled"
