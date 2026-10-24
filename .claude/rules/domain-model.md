@@ -1,6 +1,6 @@
 # Domain model: ubiquitous language, aggregates, events, use cases
 
-Source of truth: retail-network-docs `model/model.yaml` (context `linehaul-transportation`) and the contracts-delta of the
+Source of truth: warehouse-docs `network/model/model.yaml` (context `linehaul-transportation`) and the contracts-delta of the
 campaign. Invariants, transitions and every assumption the model left open are in
 `docs/adr/0002-aggregates-and-invariants.md` (assumptions A1-A30).
 
