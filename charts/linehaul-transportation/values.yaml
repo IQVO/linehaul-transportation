@@ -175,3 +175,66 @@ terminationGracePeriodSeconds: 40
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# The read-only MCP server (ADR 0008): cmd/mcp on Streamable HTTP :8090,
+# exposing list_departures and get_departure over the same read use cases the
+# REST adapter serves. Default OFF. When enabled it needs the database values
+# above (DATABASE_URL comes from the same Secret as the api) but never Kafka:
+# the binary runs no relay, no horizon roll and no consumer.
+mcp:
+  enabled: false
+  replicaCount: 1
+  httpAddr: ":8090"                  # MCP_ADDR
+  service:
+    type: ClusterIP
+    port: 8090
+    targetPort: 8090
+  # Kong exposure: /api/mcp/linehaul-transportation -> Service :8090, prefix
+  # rewritten to /mcp. Needs the Gateway parentRef from warehouse-infra.
+  # Unauthenticated by the fleet-wide decision of 2026-09-11.
+  route:
+    enabled: false
+    path: "/api/mcp/linehaul-transportation"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
+  extraEnv: []
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# web/ (linehaul_mfe): the Module Federation remote served by its own nginx
+# pod, reached through warehouse-infra's Nginx web gateway at
+# /mfes/linehaul-transportation/. Never routed by this chart; ClusterIP only;
+# renders NO env (ADR 0009). Default OFF.
+frontend:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: warehouse/linehaul-transportation-frontend
+    pullPolicy: IfNotPresent
+    tag: ""
+  service:
+    port: 80
+    targetPort: 8080
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi

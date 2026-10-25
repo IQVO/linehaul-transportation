@@ -178,4 +178,69 @@ if grep -q 'replicas:' <<<"$(render "${base[@]}" --set autoscaling.api.enabled=t
   fail "the Deployment must omit replicas when the HPA owns them"
 fi
 
+# --- optional components (ADR 0008 mcp, ADR 0009 web remote) ------------------------
+
+render_only() { # render_only <template> <helm args...>
+  local tpl="$1"; shift
+  render "$@" --show-only "templates/$tpl"
+}
+binary_env_of() { # binary_env_of <file>: upper-case string literals of one non-test source
+  grep -ohE '"[A-Z][A-Z0-9_]{2,}"' "$1" | tr -d '"' | sort -u
+}
+assert_env_rendered() { # assert_env_rendered <rendered> <what> <vars...>
+  local rendered="$1" what="$2"; shift 2
+  for var in "$@"; do
+    grep -q "name: $var\$" <<<"$rendered" || fail "$what does not render $var"
+  done
+}
+
+# mcp: its own env, never the api ConfigMap, never Kafka (ADR 0008).
+mcp_dep="$(render_only mcp-deployment.yaml "${base[@]}" --set mcp.enabled=true)"
+grep -q 'app.kubernetes.io/component: mcp' <<<"$mcp_dep" || fail "the mcp Deployment was not rendered with mcp.enabled=true"
+grep -q 'command: \["/app/mcp"\]' <<<"$mcp_dep" || fail "the mcp Deployment must run /app/mcp"
+if grep -q 'configMapRef:' <<<"$mcp_dep"; then fail "mcp-deployment.yaml must not mount the api ConfigMap"; fi
+if grep -Eq 'name: (KAFKA_BROKERS|OUTBOX_[A-Z_]+|[A-Z]+_CONSUMER_GROUP|GENERATE_INTERVAL)$' <<<"$mcp_dep"; then
+  fail "the mcp Deployment must not get Kafka/relay/consumer/horizon env (read-only, never dials Kafka)"
+fi
+mcp_vars=($(binary_env_of "$repo_dir/cmd/mcp/main.go"))
+(( ${#mcp_vars[@]} >= 3 )) || fail "found only ${#mcp_vars[@]} env literals in cmd/mcp/main.go; the scan is looking in the wrong place"
+assert_env_rendered "$mcp_dep" "the mcp Deployment" "${mcp_vars[@]}" DATABASE_URL MIGRATIONS_DATABASE_URL
+grep -A4 'name: DATABASE_URL$' <<<"$mcp_dep" | grep -q 'secretKeyRef:' || fail "the mcp DATABASE_URL must come from a Secret (secretKeyRef)"
+grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$mcp_dep" | grep -q 'optional: true' || fail "the mcp MIGRATIONS_DATABASE_URL must be optional: true"
+grep -q 'path: /healthz' <<<"$mcp_dep" || fail "the mcp probes must hit /healthz"
+mcp_svc="$(render_only mcp-service.yaml "${base[@]}" --set mcp.enabled=true)"
+grep -q 'app.kubernetes.io/component: mcp' <<<"$mcp_svc" || fail "the mcp Service must pin component=mcp"
+# The Kong route is opt-in on top of the workload, rewrites /api/mcp/<context>
+# to the SDK's canonical /mcp, and carries no auth plugin (fleet revert).
+mcp_route="$(render_only mcp-route.yaml "${base[@]}" --set mcp.enabled=true --set mcp.route.enabled=true --set mcp.route.parentRefs[0].name=gw --set mcp.route.parentRefs[0].namespace=kong)"
+grep -q 'kind: HTTPRoute' <<<"$mcp_route" || fail "the mcp HTTPRoute did not render with mcp.route.enabled=true"
+grep -q 'replacePrefixMatch: /mcp' <<<"$mcp_route" || fail "the mcp route must rewrite the prefix to /mcp"
+grep -q 'value: /api/mcp/linehaul-transportation' <<<"$mcp_route" || fail "the mcp route path must be /api/mcp/linehaul-transportation"
+if grep -qiE 'plugin|apikey|key-auth|jwt' <<<"$mcp_route"; then fail "the mcp route must carry no auth plugin"; fi
+if grep -q 'kind: HTTPRoute' <<<"$(render "${base[@]}" --set mcp.enabled=true)"; then
+  fail "the mcp route must be off unless mcp.route.enabled=true"
+fi
+
+# frontend (linehaul_mfe): static nginx bytes, no database, no Kafka, no
+# routing in this chart (ADR 0009).
+frontend_dep="$(render_only frontend-deployment.yaml "${base[@]}" --set frontend.enabled=true)"
+frontend_svc="$(render_only frontend-service.yaml "${base[@]}" --set frontend.enabled=true)"
+grep -q 'app.kubernetes.io/component: frontend' <<<"$frontend_dep" || fail "the frontend Deployment was not rendered with frontend.enabled=true"
+grep -q 'type: ClusterIP' <<<"$frontend_svc" || fail "the frontend Service must stay ClusterIP"
+if grep -Eq 'name: (DATABASE_URL|KAFKA_BROKERS|MCP_ADDR)$' <<<"$frontend_dep"; then fail "the frontend Deployment must not get database/Kafka/MCP env"; fi
+if grep -qE '^ +- name: [A-Z_]+$|^ +env:' <<<"$frontend_dep"; then fail "the frontend Deployment must render NO env at all"; fi
+grep -q 'path: /healthz' <<<"$frontend_dep" || fail "the frontend probes must hit /healthz"
+
+# Every component at once: each Deployment pins its own component label, so
+# the api Service still selects exactly the api pods (the python test asserts
+# the selector mechanics; this catches a label regressed to a shared value).
+together="$(render "${base[@]}" --set mcp.enabled=true --set mcp.route.enabled=true --set mcp.route.parentRefs[0].name=gw --set mcp.route.parentRefs[0].namespace=kong --set frontend.enabled=true)"
+for component in api mcp frontend; do
+  (( $(grep -c "app.kubernetes.io/component: $component" <<<"$together") >= 2 )) \
+    || fail "component $component must label both its Deployment selector and its pod template"
+done
+if grep -E 'kind: (Ingress|HTTPRoute)' <<<"$together" | grep -q frontend; then
+  fail "frontend routing must not live in this chart"
+fi
+
 echo "PASS: linehaul-transportation chart render assertions"

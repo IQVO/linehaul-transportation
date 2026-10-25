@@ -1,0 +1,21 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "linehaul-transportation.mcpFullname" . }}
+  labels:
+    {{- include "linehaul-transportation.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  type: {{ .Values.mcp.service.type }}
+  ports:
+    - port: {{ .Values.mcp.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  # component=mcp: every pod of the release shares name/instance, so the
+  # Service pins the component too (tests/test_service_selectors.py).
+  selector:
+    {{- include "linehaul-transportation.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+{{- end }}
