@@ -113,6 +113,14 @@ go run ./cmd/api                       # listens on :8080 (HTTP_ADDR)
 
 All settings, the probes, the shutdown order and the outbox and dead-letter runbook: [docs/runtime.md](docs/runtime.md).
 
+## Observability
+
+Logs, metrics and traces follow the fleet standard ([ADR 0010](docs/adr/0010-fleet-observability-standard.md)): JSON logs carry `trace_id`/`span_id`
+and a `request_id`; `cmd/api` and `cmd/mcp` export OTLP/gRPC to the Collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `SERVICE_VERSION`,
+`ENVIRONMENT`; export never blocks, so no Collector costs telemetry, nothing else) with HTTP request duration, Go runtime metrics and the business
+counter `linehaul.loads.dispatched` (`outcome`, `reason`); the trace continues across Kafka in the `traceparent` header of each published event and is
+picked up by the consumers. The chart's `otel.*` values render the env.
+
 ## Deploy
 
 The Helm chart is `charts/linehaul-transportation` (one `api` Deployment and Service; HPA, Ingress and Gateway API route are off by default).

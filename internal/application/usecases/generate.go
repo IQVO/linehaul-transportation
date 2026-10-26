@@ -40,7 +40,7 @@ func (s *Service) GenerateDepartures(ctx context.Context) (GenerateReport, error
 	for _, sc := range schedules {
 		n, err := s.generateLane(ctx, sc.LaneID())
 		rep.add(n, err)
-		s.logFailure("lane schedule", sc.LaneID(), err)
+		s.logFailure(ctx, "lane schedule", sc.LaneID(), err)
 	}
 	nodes, err := s.Nodes.ListPickupEligible(ctx)
 	if err != nil {
@@ -49,7 +49,7 @@ func (s *Service) GenerateDepartures(ctx context.Context) (GenerateReport, error
 	for _, n := range nodes {
 		count, err := s.generatePickups(ctx, n.ID)
 		rep.add(count, err)
-		s.logFailure("pickups of node", n.ID, err)
+		s.logFailure(ctx, "pickups of node", n.ID, err)
 	}
 	return rep, ctx.Err()
 }
@@ -62,9 +62,9 @@ func (r *GenerateReport) add(n int, err error) {
 	r.Scheduled += n
 }
 
-func (s *Service) logFailure(what, id string, err error) {
+func (s *Service) logFailure(ctx context.Context, what, id string, err error) {
 	if err != nil {
-		s.Logger.Warn("generate departures failed", "what", what, "id", id, "error", err)
+		s.Logger.WarnContext(ctx, "generate departures failed", "what", what, "id", id, "error", err)
 	}
 }
 
@@ -97,7 +97,7 @@ func (s *Service) generateLane(ctx context.Context, laneID string) (int, error) 
 		}
 		specs, err := schedule.PlanLane(sc, lane, origin, dest, s.Clock.Now())
 		if err != nil {
-			s.Logger.Info("lane skipped", "lane", laneID, "reason", err.Error())
+			s.Logger.InfoContext(ctx, "lane skipped", "lane", laneID, "reason", err.Error())
 			return nil, nil
 		}
 		evs, err := s.scheduleSpecs(ctx, specs)
@@ -135,7 +135,7 @@ func (s *Service) scheduleSpecs(ctx context.Context, specs []departure.Spec) ([]
 		}
 		d, evs, err := departure.Schedule(spec, err == nil && lane.Open, now)
 		if err != nil {
-			s.Logger.Info("departure not scheduled", "departure", spec.ID, "lane", spec.LaneID, "reason", err.Error())
+			s.Logger.InfoContext(ctx, "departure not scheduled", "departure", spec.ID, "lane", spec.LaneID, "reason", err.Error())
 			continue
 		}
 		if err := s.Departures.Save(ctx, d); err != nil {

@@ -36,7 +36,7 @@ func newFixture(t *testing.T) *fixture {
 		Nodes: store.Nodes(), Lanes: store.Lanes(), Volumes: store.Volumes(), Inbox: store.Inbox(), Outbox: store.Outbox(),
 		Clock: memory.NewClock(t0), IDs: &memory.SequentialIDs{},
 	})
-	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc}))
+	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc}, nil, ""))
 	t.Cleanup(srv.Close)
 	return &fixture{t: t, store: store, srv: srv}
 }
@@ -266,7 +266,7 @@ func TestAnIdempotencyMiddlewareWrapsEveryPOSTAndNoGET(t *testing.T) {
 			})
 		}
 	}
-	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc, Idempotency: mw}))
+	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc, Idempotency: mw}, nil, ""))
 	defer srv.Close()
 	for _, c := range [][2]string{{"POST", "/lane-schedules"}, {"POST", "/lane-schedules/l:retire"}, {"POST", "/departures/d:cancel"},
 		{"POST", "/departures/d:change-capacity"}, {"POST", "/loads"}, {"POST", "/loads/l/packages"}, {"POST", "/loads/l:close"},
