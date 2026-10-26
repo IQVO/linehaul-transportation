@@ -51,6 +51,8 @@ import (
 	outboxrelay "github.com/claudioed/linehaul-transportation/internal/adapters/outbound/outbox"
 	"github.com/claudioed/linehaul-transportation/internal/adapters/outbound/postgres"
 	"github.com/claudioed/linehaul-transportation/internal/adapters/outbound/postgres/pgtx"
+	"github.com/claudioed/linehaul-transportation/internal/adapters/outbound/telemetry"
+	"github.com/claudioed/linehaul-transportation/internal/application/ports"
 	"github.com/claudioed/linehaul-transportation/internal/application/usecases"
 )
 
@@ -97,7 +99,12 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 
-	app := buildApp(pool, cfg, logger)
+	// The business counter binds to the MeterProvider telemetry.Setup installed.
+	loadMetrics, err := telemetry.NewLoadMetrics()
+	if err != nil {
+		return err
+	}
+	app := buildApp(pool, cfg, logger, loadMetrics)
 	readiness := inboundhttp.NewReadiness(0, 0,
 		inboundhttp.Dependency{Name: "postgres", Check: pool.Ping},
 		inboundhttp.Dependency{Name: "kafka", Check: app.brokerCheck.Check},
@@ -141,14 +148,14 @@ type app struct {
 }
 
 // buildApp wires the adapters into the use cases and lists the background workers.
-func buildApp(pool *pgxpool.Pool, cfg config, logger *slog.Logger) *app {
+func buildApp(pool *pgxpool.Pool, cfg config, logger *slog.Logger, metrics ports.LoadMetrics) *app {
 	outboxRepo := postgres.NewOutboxRepo(pool)
 	service := usecases.New(usecases.Deps{
 		UoW: postgres.NewUnitOfWork(pool), Departures: postgres.NewDepartureRepo(pool), Schedules: postgres.NewScheduleRepo(pool),
 		Loads: postgres.NewLoadRepo(pool), Nodes: postgres.NewNodeViewRepo(pool), Lanes: postgres.NewLaneViewRepo(pool),
 		Volumes: postgres.NewVolumeRepo(pool), Inbox: postgres.NewProcessedEventRepo(pool),
 		Outbox: postgres.NewEventOutbox(outboxRepo, wire.Encoder{NewID: uuid.NewString}),
-		Clock:  clock.System{}, IDs: ids.UUID{}, PackagesPerOrder: cfg.packagesPerOrder, Logger: logger,
+		Clock:  clock.System{}, IDs: ids.UUID{}, PackagesPerOrder: cfg.packagesPerOrder, Logger: logger, Metrics: metrics,
 	})
 	sink := outboundkafka.NewRelaySink(cfg.brokers)
 	relay := outboxrelay.NewOutboxRelay(outboxRepo, sink, logger,
