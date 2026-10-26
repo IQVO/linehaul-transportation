@@ -19,6 +19,10 @@
 //	PACKAGES_PER_ORDER          packages one order adds to a pickup (default 1, ADR 0002 A9)
 //	SHUTDOWN_DRAIN_DELAY        wait after flipping /readyz before closing (default 5s)
 //	LOG_LEVEL                   debug, info, warn or error (default info)
+//	OTEL_SERVICE_NAME           service.name of spans and metrics (default linehaul-transportation)
+//	OTEL_EXPORTER_OTLP_ENDPOINT Collector OTLP/gRPC endpoint (default telemetry.DefaultEndpoint); export never blocks
+//	SERVICE_VERSION             service.version (default dev)
+//	ENVIRONMENT                 deployment.environment.name (default local)
 //
 // GET /readyz is 200 only while Postgres answers a ping AND a Kafka broker
 // answers a metadata request (verdict cached 3s, bounded 2s); /healthz is
@@ -74,6 +78,16 @@ func run(ctx context.Context) error {
 	logger := newLogger(cfg.logLevel)
 	slog.SetDefault(logger)
 
+	// Telemetry comes up before the router is built (otelchimetric binds the
+	// global MeterProvider at construction) and is flushed LAST: deferred before
+	// everything below, so the final spans of the drain still leave the process.
+	tel := loadTelemetryEnv(os.Getenv)
+	flushTelemetry, err := startTelemetry(logger, tel)
+	if err != nil {
+		return err
+	}
+	defer flushTelemetry()
+
 	if err := migrate(ctx, cfg); err != nil {
 		return err
 	}
@@ -93,7 +107,7 @@ func run(ctx context.Context) error {
 		Handler: inboundhttp.NewRouter(&inboundhttp.Server{
 			Service: app.service, Readiness: readiness,
 			Idempotency: inboundhttp.RequireIdempotencyKey(pool, pgtx.With),
-		}),
+		}, logger, tel.serviceName),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

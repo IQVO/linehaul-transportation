@@ -59,7 +59,7 @@ func newDBAPI(t *testing.T) dbAPI {
 		Outbox: postgres.NewEventOutbox(postgres.NewOutboxRepo(pool), wire.Encoder{NewID: uuid.NewString}),
 		Clock:  clock.System{}, IDs: ids.UUID{},
 	})
-	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc, Idempotency: inbound.RequireIdempotencyKey(pool, pgtx.With)}))
+	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc, Idempotency: inbound.RequireIdempotencyKey(pool, pgtx.With)}, nil, ""))
 	t.Cleanup(srv.Close)
 	return dbAPI{t: t, pool: pool, srv: srv}
 }
