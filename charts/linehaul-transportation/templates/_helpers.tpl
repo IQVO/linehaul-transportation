@@ -124,14 +124,14 @@ all: the binary has none) and may not re-set a variable that has a dedicated
 value, so a mandatory value cannot be bypassed.
 */}}
 {{- define "linehaul-transportation.requireSaneExtraEnv" -}}
-{{- $owned := list "HTTP_ADDR" "LOG_LEVEL" "DATABASE_URL" "MIGRATIONS_DATABASE_URL" "KAFKA_BROKERS" "NODE_TOPOLOGY_CONSUMER_GROUP" "ORDER_SOURCING_CONSUMER_GROUP" "SHIPPING_AND_TRACKING_CONSUMER_GROUP" "OUTBOX_RELAY_INTERVAL" "OUTBOX_MAX_ATTEMPTS" "GENERATE_INTERVAL" "PACKAGES_PER_ORDER" "SHUTDOWN_DRAIN_DELAY" -}}
+{{- $owned := list "HTTP_ADDR" "LOG_LEVEL" "DATABASE_URL" "MIGRATIONS_DATABASE_URL" "KAFKA_BROKERS" "NODE_TOPOLOGY_CONSUMER_GROUP" "ORDER_SOURCING_CONSUMER_GROUP" "SHIPPING_AND_TRACKING_CONSUMER_GROUP" "OUTBOX_RELAY_INTERVAL" "OUTBOX_MAX_ATTEMPTS" "GENERATE_INTERVAL" "PACKAGES_PER_ORDER" "SHUTDOWN_DRAIN_DELAY" "ENVIRONMENT" "SERVICE_VERSION" "OTEL_SERVICE_NAME" "OTEL_EXPORTER_OTLP_ENDPOINT" -}}
 {{- range .Values.extraEnv -}}
 {{- $name := toString .name -}}
 {{- if hasSuffix "_MODE" $name -}}
 {{- fail (printf "extraEnv sets %s - *_MODE variables do not exist in linehaul-transportation: it runs on real Postgres and real Kafka only, with no permissive or in-memory mode." $name) -}}
 {{- end -}}
 {{- if has $name $owned -}}
-{{- fail (printf "extraEnv sets %s - it has a dedicated chart value (config.*, database.*, kafka.brokers); set that instead." $name) -}}
+{{- fail (printf "extraEnv sets %s - it has a dedicated chart value (config.*, database.*, kafka.brokers, otel.*, environment); set that instead." $name) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

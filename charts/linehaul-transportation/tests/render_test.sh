@@ -78,6 +78,33 @@ for var in $required_vars; do
   grep -q "name: $var\$" <<<"$api_deployment" || fail "the api Deployment does not render $var, which cmd/api requires"
 done
 
+# --- observability (ADR 0010, fleet standard item 7) --------------------------------
+# The api renders the fleet pipeline's env: the Collector endpoint, the service
+# name, the version (image tag) and the environment.
+otel_endpoint="otel-collector.observability.svc.cluster.local:4317"
+[[ "$(env_value "$api_deployment" OTEL_EXPORTER_OTLP_ENDPOINT)" == "$otel_endpoint" ]] \
+  || fail "the api Deployment does not render OTEL_EXPORTER_OTLP_ENDPOINT from otel.endpoint"
+[[ "$(env_value "$api_deployment" OTEL_SERVICE_NAME)" == "linehaul-transportation" ]] \
+  || fail "the api Deployment does not render OTEL_SERVICE_NAME=linehaul-transportation from otel.serviceName"
+[[ "$(env_value "$api_deployment" SERVICE_VERSION)" == "local" ]] || fail "SERVICE_VERSION must follow image.tag"
+[[ "$(env_value "$api_deployment" ENVIRONMENT)" == "production" ]] || fail "ENVIRONMENT must come from environment"
+tagged="$(render "${base[@]}" --set image.tag=v9.9.9 --set otel.serviceName=linehaul --set otel.endpoint=http://collector:4317 \
+  --set environment=staging --show-only templates/deployment.yaml)"
+[[ "$(env_value "$tagged" SERVICE_VERSION)" == "v9.9.9" ]] || fail "SERVICE_VERSION must follow image.tag"
+[[ "$(env_value "$tagged" OTEL_SERVICE_NAME)" == "linehaul" ]] || fail "OTEL_SERVICE_NAME must follow otel.serviceName"
+[[ "$(env_value "$tagged" OTEL_EXPORTER_OTLP_ENDPOINT)" == "http://collector:4317" ]] || fail "OTEL_EXPORTER_OTLP_ENDPOINT must follow otel.endpoint"
+[[ "$(env_value "$tagged" ENVIRONMENT)" == "staging" ]] || fail "ENVIRONMENT must follow environment"
+untagged="$(render "${base[@]}" --set image.tag= --show-only templates/deployment.yaml)"
+[[ "$(env_value "$untagged" SERVICE_VERSION)" == "0.1.0" ]] || fail "SERVICE_VERSION must fall back to the chart appVersion"
+# otel.enabled=false renders no OTEL_* env (SERVICE_VERSION stays).
+otel_off="$(render "${base[@]}" --set otel.enabled=false --set mcp.enabled=true)"
+if grep -q 'name: OTEL_' <<<"$otel_off"; then fail "otel.enabled=false must render no OTEL_* env in any component"; fi
+grep -q 'name: SERVICE_VERSION$' <<<"$otel_off" || fail "SERVICE_VERSION must still render with otel.enabled=false"
+# The values are chart-owned: extraEnv may not set them a second time.
+for owned in OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT SERVICE_VERSION ENVIRONMENT; do
+  expect_refusal "extraEnv setting the chart-owned $owned" "extraEnv sets $owned" "${base[@]}" --set "extraEnv[0].name=$owned" --set 'extraEnv[0].value=x'
+done
+
 # --- no *_MODE, no in-memory / permissive mode anywhere -----------------------------
 render_all="$(render "${base[@]}")"
 if grep -qE '^ +(- name: )?[A-Z_]+_MODE\b' <<<"$render_all"; then fail "the render carries a *_MODE variable"; fi
@@ -184,8 +211,8 @@ render_only() { # render_only <template> <helm args...>
   local tpl="$1"; shift
   render "$@" --show-only "templates/$tpl"
 }
-binary_env_of() { # binary_env_of <file>: upper-case string literals of one non-test source
-  grep -ohE '"[A-Z][A-Z0-9_]{2,}"' "$1" | tr -d '"' | sort -u
+binary_env_of() { # binary_env_of <file>...: upper-case string literals of non-test sources
+  grep -ohE '"[A-Z][A-Z0-9_]{2,}"' "$@" | tr -d '"' | sort -u
 }
 assert_env_rendered() { # assert_env_rendered <rendered> <what> <vars...>
   local rendered="$1" what="$2"; shift 2
@@ -202,9 +229,15 @@ if grep -q 'configMapRef:' <<<"$mcp_dep"; then fail "mcp-deployment.yaml must no
 if grep -Eq 'name: (KAFKA_BROKERS|OUTBOX_[A-Z_]+|[A-Z]+_CONSUMER_GROUP|GENERATE_INTERVAL)$' <<<"$mcp_dep"; then
   fail "the mcp Deployment must not get Kafka/relay/consumer/horizon env (read-only, never dials Kafka)"
 fi
-mcp_vars=($(binary_env_of "$repo_dir/cmd/mcp/main.go"))
+mcp_vars=($(binary_env_of "$repo_dir/cmd/mcp/main.go" "$repo_dir/cmd/mcp/telemetry.go"))
 (( ${#mcp_vars[@]} >= 3 )) || fail "found only ${#mcp_vars[@]} env literals in cmd/mcp/main.go; the scan is looking in the wrong place"
-assert_env_rendered "$mcp_dep" "the mcp Deployment" "${mcp_vars[@]}" DATABASE_URL MIGRATIONS_DATABASE_URL
+assert_env_rendered "$mcp_dep" "the mcp Deployment" "${mcp_vars[@]}" DATABASE_URL MIGRATIONS_DATABASE_URL \
+  SERVICE_VERSION ENVIRONMENT OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT
+[[ "$(env_value "$mcp_dep" OTEL_SERVICE_NAME)" == "linehaul-transportation-mcp" ]] || fail "the mcp component must export as <otel.serviceName>-mcp"
+[[ "$(env_value "$mcp_dep" OTEL_EXPORTER_OTLP_ENDPOINT)" == "$otel_endpoint" ]] || fail "the mcp component must export to otel.endpoint"
+[[ "$(env_value "$mcp_dep" SERVICE_VERSION)" == "local" ]] || fail "the mcp SERVICE_VERSION must follow image.tag, like the api"
+mcp_named="$(render_only mcp-deployment.yaml "${base[@]}" --set mcp.enabled=true --set otel.serviceName=linehaul)"
+[[ "$(env_value "$mcp_named" OTEL_SERVICE_NAME)" == "linehaul-mcp" ]] || fail "the mcp service name must follow otel.serviceName"
 grep -A4 'name: DATABASE_URL$' <<<"$mcp_dep" | grep -q 'secretKeyRef:' || fail "the mcp DATABASE_URL must come from a Secret (secretKeyRef)"
 grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$mcp_dep" | grep -q 'optional: true' || fail "the mcp MIGRATIONS_DATABASE_URL must be optional: true"
 grep -q 'path: /healthz' <<<"$mcp_dep" || fail "the mcp probes must hit /healthz"
