@@ -19,6 +19,9 @@
 | `PACKAGES_PER_ORDER` | `1` | Packages one order adds to a pickup departure's capacity (ADR 0002 A9). |
 | `SHUTDOWN_DRAIN_DELAY` | `5s` | Wait between flipping `/readyz` to 503 and closing the listener; `0` disables. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
+| `OTEL_SERVICE_NAME` | `linehaul-transportation` | `service.name` of spans and metrics (ADR 0010); `cmd/mcp` defaults to `linehaul-transportation-mcp`. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | Collector OTLP/gRPC, `host:port` or URL; export never blocks. |
+| `SERVICE_VERSION` / `ENVIRONMENT` | `dev` / `local` | `service.version` / `deployment.environment.name`. |
 
 Configuration errors are raised before anything is opened or bound. Consumer group ids must be stable and service-prefixed
 (for example `linehaul-transportation-node-topology`), never derived from a pod name.
@@ -45,6 +48,8 @@ The grace period of a pod must exceed the sum of these bounds (5 + 10 + 10 s).
 - **Env mapping**: every variable in the table above has a `config.*` / `database.*` / `kafka.brokers` value and is always rendered, with the
   binary's defaults (`OUTBOX_RELAY_INTERVAL` 1s, `OUTBOX_MAX_ATTEMPTS` 20, `GENERATE_INTERVAL` 1h, `PACKAGES_PER_ORDER` 1,
   `SHUTDOWN_DRAIN_DELAY` 5s). `extraEnv` may not set a `*_MODE` variable or any variable that has a dedicated value.
+- **Observability env**: `otel.endpoint`, `otel.serviceName` (`<name>-mcp` for the mcp component) and `environment` render `OTEL_EXPORTER_OTLP_ENDPOINT`,
+  `OTEL_SERVICE_NAME` and `ENVIRONMENT`; `SERVICE_VERSION` is `image.tag` (appVersion when empty). `otel.enabled=false` renders no `OTEL_*` env (ADR 0010).
 - **Secrets**: `DATABASE_URL` is a `secretKeyRef` (key `database.existingSecretKey`); `MIGRATIONS_DATABASE_URL` is a `secretKeyRef` with
   `optional: true` (key `database.migrationsExistingSecretKey`), so the binary falls back to `DATABASE_URL` when the key is absent. No DSN is
   ever in the ConfigMap.
