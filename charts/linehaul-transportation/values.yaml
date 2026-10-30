@@ -225,6 +225,47 @@ mcp:
       cpu: 100m
       memory: 128Mi
 
+# The read-only A2A (Agent2Agent) agent (ADR 0011): cmd/a2a on JSON-RPC over
+# HTTP :8093, the third driving adapter over the SAME read use cases as REST
+# and MCP. Skills (both reads): list_departures and get_departure. Default
+# OFF. When enabled it needs the database values above (DATABASE_URL comes from
+# the same Secret as the api) but never Kafka: the binary runs no relay, no
+# horizon roll and no consumer, and it calls no other context. A2A carries
+# delegation only; facts between contexts still travel as CloudEvents on Kafka.
+a2a:
+  enabled: false
+  replicaCount: 1
+  # A2A_ADDR the binary listens on; keep in sync with service.targetPort.
+  # (8080 is the api, 8090 the MCP server, so 8093.)
+  httpAddr: ":8093"
+  # Absolute URL advertised on the Agent Card (A2A_AGENT_URL, mandatory for the
+  # binary). Empty defaults to this release's in-cluster Service DNS
+  # (http://<release>-a2a.<ns>.svc.cluster.local:8093/); warehouse-infra can
+  # override it with the Kong path when the agent must be reachable off-cluster.
+  agentUrl: ""
+  service:
+    type: ClusterIP
+    port: 8093
+    targetPort: 8093
+  # Kong exposure: /api/a2a/linehaul-transportation -> Service :8093, prefix
+  # rewritten to / (JSON-RPC root; the well-known agent card stays reachable
+  # under the same prefix). Needs the Gateway parentRef from warehouse-infra.
+  # Unauthenticated by the fleet-wide decision.
+  route:
+    enabled: false
+    path: "/api/a2a/linehaul-transportation"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 # web/ (linehaul_mfe): the Module Federation remote served by its own nginx
 # pod, reached through warehouse-infra's Nginx web gateway at
 # /mfes/linehaul-transportation/. Never routed by this chart; ClusterIP only;

@@ -191,3 +191,12 @@ own Deployment + Service pair, pinned by app.kubernetes.io/component=mcp
 {{- define "linehaul-transportation.mcpFullname" -}}
 {{- include "linehaul-transportation.fullname" . }}-mcp
 {{- end -}}
+
+{{/*
+Fully qualified name of the optional read-only A2A workload (ADR 0011): its
+own Deployment + Service pair, pinned by app.kubernetes.io/component=a2a
+(tests/test_service_selectors.py).
+*/}}
+{{- define "linehaul-transportation.a2aFullname" -}}
+{{- include "linehaul-transportation.fullname" . }}-a2a
+{{- end -}}

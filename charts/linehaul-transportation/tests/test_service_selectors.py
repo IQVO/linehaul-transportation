@@ -8,10 +8,11 @@ in selector.matchLabels and its pod labels, and every Service selects on it, so
 each Service selects EXACTLY ONE Deployment. This test fails if that ever stops
 being true.
 
-linehaul-transportation has three components: api (always), mcp (the
-read-only MCP server of ADR 0008, default off) and frontend (the nginx pod
-serving the linehaul_mfe remote of ADR 0009, default off), plus the optional
-api HPA / Ingress / HTTPRoute and the mcp Kong route, all off by default. The
+linehaul-transportation has four components: api (always), mcp (the
+read-only MCP server of ADR 0008, default off), a2a (the read-only A2A agent
+of ADR 0011, default off) and frontend (the nginx pod serving the
+linehaul_mfe remote of ADR 0009, default off), plus the optional api HPA /
+Ingress / HTTPRoute and the mcp and a2a Kong routes, all off by default. The
 test renders the chart with every optional template on, checks each
 component's env, and that no route ever points at the frontend.
 
@@ -61,11 +62,18 @@ ENABLE_EVERYTHING = BASE + [
     "--set", "mcp.route.enabled=true",
     "--set", "mcp.route.parentRefs[0].name=gw",
     "--set", "mcp.route.parentRefs[0].namespace=kong",
+    "--set", "a2a.enabled=true",
+    "--set", "a2a.route.enabled=true",
+    "--set", "a2a.route.parentRefs[0].name=gw",
+    "--set", "a2a.route.parentRefs[0].namespace=kong",
     "--set", "frontend.enabled=true",
 ]
 
 # Every env var cmd/mcp reads (cmd/mcp/main.go).
 MCP_ENV = ("MCP_ADDR", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL")
+
+# Every env var cmd/a2a reads (cmd/a2a/main.go).
+A2A_ENV = ("A2A_ADDR", "A2A_AGENT_URL", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL")
 
 # Every env var cmd/api reads (cmd/api/config.go).
 API_ENV = (
@@ -119,13 +127,14 @@ def check_components(docs: list[dict], failures: list[str]) -> None:
     services = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Service"}
     deployments = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Deployment"}
 
-    want_deployments = {RELEASE, f"{RELEASE}-mcp", f"{RELEASE}-frontend"}
-    want_services = {RELEASE, f"{RELEASE}-mcp", f"{RELEASE}-frontend"}
+    want_deployments = {RELEASE, f"{RELEASE}-mcp", f"{RELEASE}-a2a", f"{RELEASE}-frontend"}
+    want_services = {RELEASE, f"{RELEASE}-mcp", f"{RELEASE}-a2a", f"{RELEASE}-frontend"}
     if set(deployments) != want_deployments:
         failures.append(f"expected exactly the Deployments {sorted(want_deployments)}, got {sorted(deployments)}")
     if set(services) != want_services:
         failures.append(f"expected exactly the Services {sorted(want_services)}, got {sorted(services)}")
     check_mcp(deployments, services, failures)
+    check_a2a(deployments, services, failures)
     check_frontend(docs, deployments, services, failures)
     if RELEASE in services and selector_of(services[RELEASE]).get("app.kubernetes.io/component") != "api":
         failures.append("the api Service selector must pin component=api")
@@ -212,6 +221,30 @@ def check_mcp(deployments: dict, services: dict, failures: list[str]) -> None:
         failures.append(f"the MCP Deployment renders env vars twice: {duplicates}")
 
 
+def check_a2a(deployments: dict, services: dict, failures: list[str]) -> None:
+    """The a2a component (ADR 0011): read-only, never Kafka, own Service."""
+    name = f"{RELEASE}-a2a"
+    if not pins(services.get(name), "a2a"):
+        failures.append("the A2A Service must exist and pin component=a2a")
+    dep = deployments.get(name)
+    if dep is None:
+        failures.append("the A2A Deployment was not rendered with a2a.enabled=true")
+        return
+    if command_of(dep) != ["/app/a2a"]:
+        failures.append("the A2A Deployment must run /app/a2a")
+    env = env_names(dep)
+    for want in A2A_ENV:
+        if want not in env:
+            failures.append(f"the A2A Deployment does not render {want}")
+    forbidden = [n for n in env if n in {"KAFKA_BROKERS", "EVENT_PUBLISHER", "GENERATE_INTERVAL"}
+                 or n.endswith("_CONSUMER_GROUP") or n.startswith("OUTBOX_")]
+    if forbidden:
+        failures.append(f"the A2A Deployment renders write-side env it must never get: {forbidden}")
+    duplicates = sorted({n for n in env if env.count(n) > 1})
+    if duplicates:
+        failures.append(f"the A2A Deployment renders env vars twice: {duplicates}")
+
+
 def check_frontend(docs: list[dict], deployments: dict, services: dict, failures: list[str]) -> None:
     """The frontend component (ADR 0009): static bytes, ClusterIP, unrouted."""
     name = f"{RELEASE}-frontend"
@@ -260,7 +293,7 @@ def main() -> int:
     stray = [d["kind"] for d in defaults if d.get("kind") in {"HorizontalPodAutoscaler", "Ingress", "HTTPRoute"}]
     if stray:
         failures.append(f"optional resources rendered with default values: {stray}")
-    optional = [n for n in (d["metadata"]["name"] for d in defaults) if n.endswith(("-mcp", "-frontend"))]
+    optional = [n for n in (d["metadata"]["name"] for d in defaults) if n.endswith(("-mcp", "-a2a", "-frontend"))]
     if optional:
         failures.append(f"optional components rendered with default values: {optional}")
     dep = next(d for d in defaults if d.get("kind") == "Deployment")
@@ -276,8 +309,8 @@ def main() -> int:
             print(f"FAIL: {f}")
         return 1
 
-    print("PASS: every Service selects exactly one Deployment (api, mcp, frontend); mcp and frontend "
-          "are off by default; every cmd/api and cmd/mcp env var is rendered and no *_MODE is; the "
+    print("PASS: every Service selects exactly one Deployment (api, mcp, a2a, frontend); mcp, a2a and frontend "
+          "are off by default; every cmd/api, cmd/mcp and cmd/a2a env var is rendered and no *_MODE is; the "
           "frontend is never routed by this chart; the chart refuses to render without a database "
           "source, brokers or any consumer group, with a *_MODE through extraEnv, or with a grace "
           "period that does not exceed the shutdown bounds")
