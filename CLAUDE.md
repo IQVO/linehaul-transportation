@@ -39,3 +39,5 @@ Aggregates, invariants and assumptions A1-A30 are in docs/adr/0002; outbox/relay
 ## Workflow
 GitFlow: feature/* -> PR into develop, CI green before merge, never push develop or main. lefthook: pre-commit fmt/vet/lint, pre-push `make check`. Commit and push after each step.
 Deploy: `charts/linehaul-transportation` (api only; refuses to render without database, `kafka.brokers` and the three `config.*ConsumerGroup`; grace period must exceed drain delay + 20 s; `helm lint`/`ct lint`, `tests/render_test.sh`, `tests/test_service_selectors.py`).
+
+A2A: `cmd/a2a` (port 8093) is this context's read-only Agent2Agent agent, skills `list_departures` (read), `get_departure` (read), decided in `docs/adr/0011-a2a-inbound-adapter.md`; delegation only (facts stay CloudEvents on Kafka), unauthenticated like REST and MCP; rules in `.claude/rules/fleet/a2a.md`.
