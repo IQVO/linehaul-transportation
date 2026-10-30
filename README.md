@@ -81,6 +81,30 @@ go run ./cmd/mcp                            # MCP_ADDR :8090, LOG_LEVEL info
 In the cluster: `mcp.enabled=true` on the chart (own Deployment + Service, default off); the Kong route
 `/api/mcp/linehaul-transportation` (rewritten to `/mcp`) is opt-in via `mcp.route.enabled`.
 
+## A2A agent (read-only)
+
+`cmd/a2a` exposes the same two reads to peer agents as a delegation channel over Agent2Agent
+([ADR 0011](docs/adr/0011-a2a-inbound-adapter.md)): JSON-RPC at `/` and `/a2a`, the Agent Card at `/.well-known/agent-card.json`, an open
+`GET /healthz`, official Go SDK, **no auth** (fleet decision) and **no writes** — no Kafka, no outbox, no consumers in that binary. A2A
+carries delegation only; facts still travel as CloudEvents on Kafka.
+
+| Skill | Mirrors | What it answers |
+| --- | --- | --- |
+| `list_departures` (`origin?`, `destination?`, `from?`, `to?`, `limit?`) | MCP `list_departures` | the horizon by `cutoffAt` with capacity, booked, remaining and state |
+| `get_departure` (`departureId`) | MCP `get_departure` | one departure, plus the cancel/depart/arrive trail |
+
+A request is `{"skill":"<id>","arguments":{...}}` in a data part; unknown arguments are refused, and rejections come back in-band as
+problems (`404 not-found`, `422 validation-failed`, `400 malformed-request|unknown-skill|invalid-argument`, `500 internal-error`).
+
+```sh
+export DATABASE_URL=postgres://user:***@localhost:5432/linehaul?sslmode=disable
+export A2A_AGENT_URL=http://localhost:8093/    # mandatory: the URL the card advertises
+go run ./cmd/a2a                               # A2A_ADDR :8093, LOG_LEVEL info
+```
+
+In the cluster: `a2a.enabled=true` on the chart (own Deployment + Service, default off); `A2A_AGENT_URL` defaults to the in-cluster Service
+DNS (`a2a.agentUrl` overrides it); the Kong route `/api/a2a/linehaul-transportation` (rewritten to `/`) is opt-in via `a2a.route.enabled`.
+
 ## Web remote (linehaul_mfe)
 
 `web/` is the warehouse-console Module Federation remote `linehaul_mfe` ([ADR 0009](docs/adr/0009-console-remote.md)): a small
@@ -147,8 +171,8 @@ Chart values, hardening and the grace-period rule: [docs/runtime.md](docs/runtim
 | `make vuln` | govulncheck |
 
 Layout: `internal/domain/{shared,departure,schedule,load,network,volume}` (pure Go), `internal/application/{ports,views,usecases,repository,outbox}`,
-`internal/adapters/inbound/{http,kafka,mcp}` (chi, consumers, read-only MCP server), `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`,
-`internal/adapters/kafka/{cloudevents,wire}`, `cmd/{api,mcp}`, `web/` (the linehaul_mfe remote), `features/` (godog BDD). The `memory` and `repocontract` packages are test doubles; `cmd/**`
+`internal/adapters/inbound/{http,kafka,mcp,a2a}` (chi, consumers, read-only MCP server, read-only A2A agent), `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`,
+`internal/adapters/kafka/{cloudevents,wire}`, `cmd/{api,mcp,a2a}`, `web/` (the linehaul_mfe remote), `features/` (godog BDD). The `memory` and `repocontract` packages are test doubles; `cmd/**`
 never imports them.
 
 Decisions: [docs/adr/](docs/adr/index.md). Packaging checklist: [docs/before-first-release.md](docs/before-first-release.md).

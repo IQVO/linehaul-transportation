@@ -16,3 +16,4 @@ one. The *Status* column is copied from each ADR's own `## Status` section.
 | [0008](./0008-mcp-server-adoption.md) | a read-only MCP server | Accepted (2026-10-24) |
 | [0009](./0009-console-remote.md) | the console remote (linehaul_mfe) — a read-only screen over the existing REST | Accepted (2026-10-24) |
 | [0010](./0010-fleet-observability-standard.md) | the fleet observability standard: trace-correlated logs, OTLP metrics and traces, the `linehaul.loads.dispatched` counter | Accepted (2026-10-26) |
+| [0011](./0011-a2a-inbound-adapter.md) | the A2A inbound adapter: a read-only Agent2Agent agent over the departure reads | Accepted (2026-10-30) |
