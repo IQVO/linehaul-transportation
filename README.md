@@ -1,16 +1,44 @@
 # linehaul-transportation
 
-Retail network, bounded context **Linehaul Transportation** (Supporting, logistics tier). Runs the middle mile: turns lanes into scheduled
-departures (including a pickup departure at every vendor node cutoff), keeps each departure's remaining capacity, builds loads of packages
-onto departures, and reports when loads depart and arrive.
+Retail network, bounded context **Linehaul Transportation** (Supporting,
+logistics tier). It runs the middle mile: turns lanes into scheduled
+departures (including a pickup departure at every vendor node cutoff), keeps
+each departure's remaining capacity, builds loads of packages onto
+departures, and reports when loads depart and arrive. It does **not** own
+nodes or lanes (`node-topology` does), fulfilment assignments
+(`order-sourcing` does) or parcel labels (`shipping-and-tracking` does) — it
+consumes their events into local read models and calls no other service. It
+is an Open Host Service (REST plus a published CloudEvents language on
+`retailnetwork.linehaul-transportation.events`). This repository is a
+service of the retail network, not of the warehouse-systems fleet; the fleet
+reaches the network only through the `vendor-connectivity` Vendor API.
 
 ## Disclaimer
 
 This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
 
-The design is proposed in [retail-network docs](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation); `model/model.yaml` there is the single source of truth.
-This repository is a service of the retail network, not of the warehouse-systems fleet; the fleet reaches the network only through the
-`vendor-connectivity` Vendor API.
+---
+
+## Documentation
+
+This repo has no docs site of its own. The context's design lives on the
+warehouse-docs retail-network pages:
+
+| Area | Pages |
+|---|---|
+| Retail network | [Network overview](https://iqvo.github.io/warehouse-docs/network) |
+| This context | [Index / service facts](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation), [Business context](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/business-context), [Domain events](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/domain-events), [Use cases](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/use-cases) |
+| DDD artifact pack | [Ubiquitous language](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/ubiquitous-language), [Context map](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/context-map), [Core domain chart](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/core-domain-chart), [Bounded context canvas](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/bounded-context-canvas), [Aggregate design canvas](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/aggregate-design-canvas), [EventStorming](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/eventstorming), [Class diagram](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/class-diagram), [Sequence diagrams](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/sequence-diagrams), [ER diagram](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/entity-relationship), [Domain message flow](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/domain-message-flow) |
+| Decisions | [Network ADRs](https://iqvo.github.io/warehouse-docs/network/adr) |
+
+In-tree: [`docs/adr/`](docs/adr/index.md) (decisions, index),
+[`docs/runtime.md`](docs/runtime.md) (settings, probes, shutdown order,
+outbox and dead-letter runbook, Helm chart),
+[`docs/operations/runbook.md`](docs/operations/runbook.md),
+[`docs/before-first-release.md`](docs/before-first-release.md) (packaging
+checklist).
+
+---
 
 ## What it does
 
@@ -28,7 +56,119 @@ This repository is a service of the retail network, not of the warehouse-systems
 Aggregates, invariants and the thirty assumptions the model left open: [docs/adr/0002](docs/adr/0002-aggregates-and-invariants.md).
 Consumed contracts and read models: [docs/adr/0003](docs/adr/0003-consumed-contracts-and-local-read-models.md).
 
-## REST API
+## Architecture
+
+Hexagonal / ports & adapters. Dependencies point inward only:
+
+```
+cmd/api/                     the REST service (composition root): HTTP, the three Kafka consumers, the horizon roll and the outbox relay in one process
+cmd/mcp/                     read-only MCP server (Streamable HTTP, :8090)
+cmd/a2a/                     read-only A2A agent (JSON-RPC over HTTP, Agent Card at /.well-known/agent-card.json)
+internal/
+  domain/                    pure Go: shared, departure, schedule, load, network, volume
+  application/               ports, usecases, views, repository, outbox
+  adapters/
+    inbound/http/            chi handlers, DTOs, RFC 9457 problem+json errors, /healthz + /readyz
+    inbound/kafka/           the node-topology, order-sourcing and shipping-and-tracking consumers
+    inbound/mcp/  inbound/a2a/   the read-only agent surfaces
+    outbound/postgres/       pgx repos, embedded golang-migrate SQL, transactional outbox
+    outbound/kafka/          the integration- and analytics-topic writers
+    outbound/outbox/         the relay
+    outbound/clock/ ids/     the wall clock and id source
+    outbound/memory/ repocontract/   test doubles, never imported by cmd/** (enforced)
+    outbound/telemetry/      OpenTelemetry wiring
+  adapters/kafka/            cloudevents, wire: the shared envelope plumbing
+  architecture/              the fitness tests
+features/                    godog BDD (Gherkin)
+web/                         the linehaul_mfe console remote
+```
+
+The layering rules are executable tests in `internal/architecture/`, not
+conventions: `architecture_test.go` (hexagonal dependencies),
+`runtime_no_memory_fitness_test.go` (no binary links the in-memory doubles),
+`mcp_readonly_fitness_test.go`, `kafka_writer_topic_fitness_test.go` /
+`kafka_writer_acks_fitness_test.go`, `outbox_relay_cap_fitness_test.go`,
+`a2a_fitness_test.go` and `no_go_files_at_root_fitness_test.go`, among
+others — run by `make arch-test`.
+
+## Domain events
+
+Contract: [`apis/asyncapi.yaml`](apis/asyncapi.yaml), catalogue in [ADR 0004](docs/adr/0004-cloudevents-envelope-and-type-catalogue.md).
+CloudEvents 1.0 structured JSON, type `com.retailnetwork.logistics.linehaul-transportation.<entity>.<Event>` (`departure`, `load`), `subject` and Kafka
+key = aggregate id.
+
+- **Published** to `retailnetwork.linehaul-transportation.events`: `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`,
+  `BookingMoved`, `BookingFailed`, `LoadDeparted`, `LoadArrived` (the last two carry `departureKind` and `nodeType`).
+  To `retailnetwork.linehaul-transportation.analytics` only: `DepartureDeparted`, `DepartureArrived`, `LoadClosed`.
+  Real types, verbatim from the contract:
+  `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureScheduled` /
+  `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived`.
+- **Consumed**: node-topology `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`,
+  `LaneClosed`; order-sourcing `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled`;
+  shipping-and-tracking `LabelIssued`, `LabelVoided`. Idempotent on the CloudEvents id, with dead letters on `<topic>.dlq`
+  ([ADR 0007](docs/adr/0007-kafka-consumers-inbox-and-dead-letters.md)).
+
+Delivery is at-least-once with a stable event id ([ADR 0005](docs/adr/0005-outbox-relay-and-attempt-cap.md)).
+
+## Running it
+
+Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS` and the three consumer groups (`NODE_TOPOLOGY_CONSUMER_GROUP`,
+`ORDER_SOURCING_CONSUMER_GROUP`, `SHIPPING_AND_TRACKING_CONSUMER_GROUP`) are mandatory (a boot error names the missing variable); the embedded
+migrations run at boot and the outbox relay is always on.
+
+```sh
+export DATABASE_URL=postgres://user:***@localhost:5432/linehaul?sslmode=disable
+export KAFKA_BROKERS=localhost:29092   # whatever your broker advertises
+export NODE_TOPOLOGY_CONSUMER_GROUP=linehaul-transportation-node-topology
+export ORDER_SOURCING_CONSUMER_GROUP=linehaul-transportation-order-sourcing
+export SHIPPING_AND_TRACKING_CONSUMER_GROUP=linehaul-transportation-shipping
+go run ./cmd/api                       # listens on :8080 (HTTP_ADDR)
+```
+
+All settings, the probes, the shutdown order and the outbox and dead-letter runbook: [docs/runtime.md](docs/runtime.md).
+
+### Configuration
+
+`cmd/api`:
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `DATABASE_URL` | **required** | Postgres DSN; unset ⇒ boot error naming the variable |
+| `MIGRATIONS_DATABASE_URL` | `DATABASE_URL` | Direct DSN for the boot migrations |
+| `KAFKA_BROKERS` | **required** | Comma-separated brokers; feeds the relay, the consumers and `/readyz` |
+| `NODE_TOPOLOGY_CONSUMER_GROUP` | **required** | Consumer group of the node-topology consumer |
+| `ORDER_SOURCING_CONSUMER_GROUP` | **required** | Consumer group of the order-sourcing consumer |
+| `SHIPPING_AND_TRACKING_CONSUMER_GROUP` | **required** | Consumer group of the shipping-and-tracking consumer |
+| `HTTP_ADDR` | `:8080` | Listen address |
+| `OUTBOX_RELAY_INTERVAL` | `1s` | Relay poll interval (Go duration or plain seconds) |
+| `OUTBOX_MAX_ATTEMPTS` | `20` | Failures before the relay excludes a row (`0` = unlimited) |
+| `GENERATE_INTERVAL` | `1h` | How often the horizon roll runs (Go duration or plain seconds) |
+| `PACKAGES_PER_ORDER` | `1` | Packages one order adds to a pickup (ADR 0002 A9) |
+| `SHUTDOWN_DRAIN_DELAY` | `5s` | Wait after flipping `/readyz` before closing |
+| `LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
+
+`cmd/mcp` reads `DATABASE_URL` (**required**), `MIGRATIONS_DATABASE_URL`
+(default `DATABASE_URL`), `MCP_ADDR` (default `:8090`) and `LOG_LEVEL`.
+`cmd/a2a` reads `DATABASE_URL` (**required**), `A2A_AGENT_URL` (**required**,
+the URL the Agent Card advertises), `MIGRATIONS_DATABASE_URL` (default
+`DATABASE_URL`), `A2A_ADDR` (default `:8093`) and `LOG_LEVEL`.
+
+All three binaries export telemetry and read `OTEL_EXPORTER_OTLP_ENDPOINT`
+(default `localhost:4317`), `OTEL_SERVICE_NAME` (default
+`linehaul-transportation`; `linehaul-transportation-mcp` /
+`linehaul-transportation-a2a` for the agent binaries), `SERVICE_VERSION`
+(default `dev`) and `ENVIRONMENT` (default `local`) — see
+[Observability](#observability).
+
+## Observability
+
+Logs, metrics and traces follow the fleet standard ([ADR 0010](docs/adr/0010-fleet-observability-standard.md)): JSON logs carry `trace_id`/`span_id`
+and a `request_id`; `cmd/api` and `cmd/mcp` export OTLP/gRPC to the Collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `SERVICE_VERSION`,
+`ENVIRONMENT`; export never blocks, so no Collector costs telemetry, nothing else) with HTTP request duration, Go runtime metrics and the business
+counter `linehaul.loads.dispatched` (`outcome`, `reason`); the trace continues across Kafka in the `traceparent` header of each published event and is
+picked up by the consumers. The chart's `otel.*` values render the env.
+
+## API
 
 Contract: [`apis/openapi.yaml`](apis/openapi.yaml). No authentication. Errors are RFC 9457 `application/problem+json` (`type` is a slug such as
 `not-found`, `illegal-transition`, `concurrent-update`, `validation-failed`, `departure-full`, `package-already-loaded`).
@@ -41,25 +181,27 @@ Every state-changing request needs an `Idempotency-Key` header: a repeat with th
 | `POST /departures/{departureId}:cancel`, `POST /departures/{departureId}:change-capacity` | planner commands |
 | `POST /loads`, `POST /loads/{loadId}/packages` | open a load, add a package |
 | `POST /loads/{loadId}:close`, `:dispatch`, `:receive` | load lifecycle |
-| `GET /healthz`, `GET /readyz` | liveness, readiness |
+| `GET /healthz`, `GET /readyz` | liveness, readiness (served by the binary; the spec covers the eleven resource paths above) |
 
-## Events
+## Helm chart
 
-Contract: [`apis/asyncapi.yaml`](apis/asyncapi.yaml), catalogue in [ADR 0004](docs/adr/0004-cloudevents-envelope-and-type-catalogue.md).
-CloudEvents 1.0 structured JSON, type `com.retailnetwork.logistics.linehaul-transportation.<entity>.<Event>` (`departure`, `load`), `subject` and Kafka
-key = aggregate id.
+The Helm chart is `charts/linehaul-transportation` (one `api` Deployment and Service; HPA, Ingress and Gateway API route are off by default).
+It refuses to render without `database.url` or `database.existingSecret`, `kafka.brokers` and the three `config.*ConsumerGroup` values:
 
-- **Published** to `retailnetwork.linehaul-transportation.events`: `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`,
-  `BookingMoved`, `BookingFailed`, `LoadDeparted`, `LoadArrived` (the last two carry `departureKind` and `nodeType`).
-  To `retailnetwork.linehaul-transportation.analytics` only: `DepartureDeparted`, `DepartureArrived`, `LoadClosed`.
-- **Consumed**: node-topology `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`,
-  `LaneClosed`; order-sourcing `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled`;
-  shipping-and-tracking `LabelIssued`, `LabelVoided`. Idempotent on the CloudEvents id, with dead letters on `<topic>.dlq`
-  ([ADR 0007](docs/adr/0007-kafka-consumers-inbox-and-dead-letters.md)).
+```sh
+helm template linehaul-transportation charts/linehaul-transportation -f charts/linehaul-transportation/ci/default-values.yaml
+bash charts/linehaul-transportation/tests/render_test.sh
+python3 charts/linehaul-transportation/tests/test_service_selectors.py
+```
 
-Delivery is at-least-once with a stable event id ([ADR 0005](docs/adr/0005-outbox-relay-and-attempt-cap.md)).
+Values that matter: `database.url` / `database.existingSecret`, `kafka.brokers`, `config.*` (`httpAddr`, `logLevel`, `outboxRelayInterval`,
+`outboxMaxAttempts`, `generateInterval`, `packagesPerOrder`, `shutdownDrainDelay`, the three consumer groups), the `otel.*` block, `environment`,
+and the optional `mcp`, `a2a` and `frontend` components (default off). Render invariants are asserted by
+`charts/linehaul-transportation/tests/render_test.sh` and `test_service_selectors.py` (every Service selects exactly one Deployment), over
+`ci/default-values.yaml` and `ci/all-components-values.yaml`. Linted in CI with
+`ct lint --charts charts/linehaul-transportation`. Chart values, hardening and the grace-period rule: [docs/runtime.md](docs/runtime.md#deployment-helm-chart).
 
-## MCP server (read-only)
+### Running the MCP server in Kubernetes
 
 `cmd/mcp` exposes the same read use cases the REST adapter serves to AI agents over the
 Model Context Protocol ([ADR 0008](docs/adr/0008-mcp-server-adoption.md)): Streamable HTTP at `/mcp` (and `/`), an open `GET /healthz`,
@@ -81,7 +223,7 @@ go run ./cmd/mcp                            # MCP_ADDR :8090, LOG_LEVEL info
 In the cluster: `mcp.enabled=true` on the chart (own Deployment + Service, default off); the Kong route
 `/api/mcp/linehaul-transportation` (rewritten to `/mcp`) is opt-in via `mcp.route.enabled`.
 
-## A2A agent (read-only)
+### Running the A2A agent in Kubernetes
 
 `cmd/a2a` exposes the same two reads to peer agents as a delegation channel over Agent2Agent
 ([ADR 0011](docs/adr/0011-a2a-inbound-adapter.md)): JSON-RPC at `/` and `/a2a`, the Agent Card at `/.well-known/agent-card.json`, an open
@@ -105,11 +247,11 @@ go run ./cmd/a2a                               # A2A_ADDR :8093, LOG_LEVEL info
 In the cluster: `a2a.enabled=true` on the chart (own Deployment + Service, default off); `A2A_AGENT_URL` defaults to the in-cluster Service
 DNS (`a2a.agentUrl` overrides it); the Kong route `/api/a2a/linehaul-transportation` (rewritten to `/`) is opt-in via `a2a.route.enabled`.
 
-## Web remote (linehaul_mfe)
+## Operator micro-frontend (`web/`)
 
 `web/` is the warehouse-console Module Federation remote `linehaul_mfe` ([ADR 0009](docs/adr/0009-console-remote.md)): a small
 **read-only** React UI over this context's two REST reads — the departure horizon (origin/destination/cutoff-window/limit filters)
-and one departure's detail. It resolves its API base at runtime from the console's `/config.json`
+and one departure's detail. It resolves its API base at runtime from the console's `window.__WAREHOUSE_CONFIG__.apiOrigin`
 (`apiOrigin` → `${apiOrigin}/api/linehaul-transportation`), never calls a sibling context, and has no write action.
 
 ```sh
@@ -120,49 +262,15 @@ cd web && npm run lint && npx tsc -b && npm test && npm run build
 In the cluster: `frontend.enabled=true` on the chart (nginx pod, ClusterIP, no env, default off), served by warehouse-infra's
 web gateway at `/mfes/linehaul-transportation/`.
 
-## Run it
+## Local development / quality gate
 
-Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS` and the three consumer groups (`NODE_TOPOLOGY_CONSUMER_GROUP`,
-`ORDER_SOURCING_CONSUMER_GROUP`, `SHIPPING_AND_TRACKING_CONSUMER_GROUP`) are mandatory (a boot error names the missing variable); the embedded
-migrations run at boot and the outbox relay is always on.
-
-```sh
-export DATABASE_URL=postgres://user:***@localhost:5432/linehaul?sslmode=disable
-export KAFKA_BROKERS=localhost:29092   # whatever your broker advertises
-export NODE_TOPOLOGY_CONSUMER_GROUP=linehaul-transportation-node-topology
-export ORDER_SOURCING_CONSUMER_GROUP=linehaul-transportation-order-sourcing
-export SHIPPING_AND_TRACKING_CONSUMER_GROUP=linehaul-transportation-shipping
-go run ./cmd/api                       # listens on :8080 (HTTP_ADDR)
-```
-
-All settings, the probes, the shutdown order and the outbox and dead-letter runbook: [docs/runtime.md](docs/runtime.md).
-
-## Observability
-
-Logs, metrics and traces follow the fleet standard ([ADR 0010](docs/adr/0010-fleet-observability-standard.md)): JSON logs carry `trace_id`/`span_id`
-and a `request_id`; `cmd/api` and `cmd/mcp` export OTLP/gRPC to the Collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `SERVICE_VERSION`,
-`ENVIRONMENT`; export never blocks, so no Collector costs telemetry, nothing else) with HTTP request duration, Go runtime metrics and the business
-counter `linehaul.loads.dispatched` (`outcome`, `reason`); the trace continues across Kafka in the `traceparent` header of each published event and is
-picked up by the consumers. The chart's `otel.*` values render the env.
-
-## Deploy
-
-The Helm chart is `charts/linehaul-transportation` (one `api` Deployment and Service; HPA, Ingress and Gateway API route are off by default).
-It refuses to render without `database.url` or `database.existingSecret`, `kafka.brokers` and the three `config.*ConsumerGroup` values:
-
-```sh
-helm template linehaul-transportation charts/linehaul-transportation -f charts/linehaul-transportation/ci/default-values.yaml
-bash charts/linehaul-transportation/tests/render_test.sh
-python3 charts/linehaul-transportation/tests/test_service_selectors.py
-```
-
-Chart values, hardening and the grace-period rule: [docs/runtime.md](docs/runtime.md#deployment-helm-chart).
-
-## Develop
+Every CI sensor is a `make` target. `make help` lists them all.
 
 | Command | What it runs |
 | --- | --- |
 | `make check` | format, vet, build, lint, unit, handler and BDD tests (the pre-push gate) |
+| `make check-fast` | fmt-check, vet, arch-test |
+| `make check-all` | check + coverage + arch-test + bdd |
 | `make coverage` | 90% gate over `internal/domain` and `internal/application` |
 | `make mutation` | gremlins on every `internal/domain/<pkg>` |
 | `make arch-test` | hexagonal and harness fitness tests |
@@ -170,9 +278,34 @@ Chart values, hardening and the grace-period rule: [docs/runtime.md](docs/runtim
 | `make integration` | testcontainers Postgres and Kafka: repositories, relay, middleware, consumers, real-wiring test (needs Docker) |
 | `make vuln` | govulncheck |
 
-Layout: `internal/domain/{shared,departure,schedule,load,network,volume}` (pure Go), `internal/application/{ports,views,usecases,repository,outbox}`,
-`internal/adapters/inbound/{http,kafka,mcp,a2a}` (chi, consumers, read-only MCP server, read-only A2A agent), `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`,
-`internal/adapters/kafka/{cloudevents,wire}`, `cmd/{api,mcp,a2a}`, `web/` (the linehaul_mfe remote), `features/` (godog BDD). The `memory` and `repocontract` packages are test doubles; `cmd/**`
-never imports them.
+Git hooks are managed by [lefthook](https://github.com/evilmartians/lefthook)
+(`lefthook.yml`): pre-commit runs `fmt-check` + `vet` + `lint`; pre-push runs
+`make check`. Activate once per clone: `lefthook install`.
 
-Decisions: [docs/adr/](docs/adr/index.md). Packaging checklist: [docs/before-first-release.md](docs/before-first-release.md).
+## Tests
+
+- **Unit** — `go test ./...` (domain, use cases, handlers; `make test`).
+- **BDD acceptance** — godog/Gherkin over the real HTTP API in `features/` (`assignments`, `booking`, `loads`, `pickups`, `schedules`; `make bdd`).
+- **Integration** — testcontainers Postgres and Kafka: repositories, relay, middleware, consumers and a real-wiring test (`make integration`, build-tagged, needs only Docker).
+- **Coverage gate** — `make coverage`: ≥ 90% over `internal/domain` + `internal/application`.
+- **Mutation** — gremlins over every `internal/domain/<pkg>` (`make mutation`; the exhaustive `mutation-full`).
+- **Architecture fitness** — `internal/architecture/` (`make arch-test`).
+- **Web** — lint, `tsc -b`, vitest and build in `web/`.
+
+CI (`.github/workflows/ci.yml`) runs `lint`, `guide-lint`, `complexity`, `test`
+(with the 90% coverage gate), `bdd`, `integration`, `mutation-fast`, `api-lint`,
+`vuln`, `chart-tests`, `arch-test` and `web` on every push and PR (`helm-lint`
+with `ct lint` on PRs); the exhaustive `mutation` and the advisory `drift`
+sensor run only on the weekly schedule or manual dispatch; `docker-publish`
+pushes the image to GHCR on `main` once the gate jobs are green, and `release`
+then tags the next version and publishes the chart.
+
+## Architecture Decision Records
+
+The ADR index lives at [docs/adr/index.md](docs/adr/index.md) — 11 decisions,
+from the bounded context and aggregates to the Kafka consumers' inbox and dead
+letters, the MCP server, the console remote and the A2A adapter.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
