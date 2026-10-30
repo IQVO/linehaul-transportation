@@ -59,7 +59,7 @@ func (d Deps) listDepartures(ctx context.Context, in listDeparturesInput) (views
 		}
 		t, err := time.Parse(time.RFC3339, raw)
 		if err != nil {
-			return views.DepartureList{}, mapError(shared.Invalid("%s must be an RFC 3339 instant", name))
+			return views.DepartureList{}, mapError(ctx, shared.Invalid("%s must be an RFC 3339 instant", name))
 		}
 		if name == "from" {
 			q.From = &t
@@ -69,7 +69,7 @@ func (d Deps) listDepartures(ctx context.Context, in listDeparturesInput) (views
 	}
 	list, err := d.Departures.ListDepartures(ctx, q)
 	if err != nil {
-		return views.DepartureList{}, mapError(err)
+		return views.DepartureList{}, mapError(ctx, err)
 	}
 	return list, nil
 }
@@ -78,7 +78,7 @@ func (d Deps) listDepartures(ctx context.Context, in listDeparturesInput) (views
 func (d Deps) getDeparture(ctx context.Context, in departureIDInput) (views.Departure, error) {
 	v, err := d.Departures.GetDeparture(ctx, in.DepartureID)
 	if err != nil {
-		return views.Departure{}, mapError(err)
+		return views.Departure{}, mapError(ctx, err)
 	}
 	return v, nil
 }

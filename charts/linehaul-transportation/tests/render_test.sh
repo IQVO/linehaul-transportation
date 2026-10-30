@@ -78,6 +78,33 @@ for var in $required_vars; do
   grep -q "name: $var\$" <<<"$api_deployment" || fail "the api Deployment does not render $var, which cmd/api requires"
 done
 
+# --- observability (ADR 0010, fleet standard item 7) --------------------------------
+# The api renders the fleet pipeline's env: the Collector endpoint, the service
+# name, the version (image tag) and the environment.
+otel_endpoint="otel-collector.observability.svc.cluster.local:4317"
+[[ "$(env_value "$api_deployment" OTEL_EXPORTER_OTLP_ENDPOINT)" == "$otel_endpoint" ]] \
+  || fail "the api Deployment does not render OTEL_EXPORTER_OTLP_ENDPOINT from otel.endpoint"
+[[ "$(env_value "$api_deployment" OTEL_SERVICE_NAME)" == "linehaul-transportation" ]] \
+  || fail "the api Deployment does not render OTEL_SERVICE_NAME=linehaul-transportation from otel.serviceName"
+[[ "$(env_value "$api_deployment" SERVICE_VERSION)" == "local" ]] || fail "SERVICE_VERSION must follow image.tag"
+[[ "$(env_value "$api_deployment" ENVIRONMENT)" == "production" ]] || fail "ENVIRONMENT must come from environment"
+tagged="$(render "${base[@]}" --set image.tag=v9.9.9 --set otel.serviceName=linehaul --set otel.endpoint=http://collector:4317 \
+  --set environment=staging --show-only templates/deployment.yaml)"
+[[ "$(env_value "$tagged" SERVICE_VERSION)" == "v9.9.9" ]] || fail "SERVICE_VERSION must follow image.tag"
+[[ "$(env_value "$tagged" OTEL_SERVICE_NAME)" == "linehaul" ]] || fail "OTEL_SERVICE_NAME must follow otel.serviceName"
+[[ "$(env_value "$tagged" OTEL_EXPORTER_OTLP_ENDPOINT)" == "http://collector:4317" ]] || fail "OTEL_EXPORTER_OTLP_ENDPOINT must follow otel.endpoint"
+[[ "$(env_value "$tagged" ENVIRONMENT)" == "staging" ]] || fail "ENVIRONMENT must follow environment"
+untagged="$(render "${base[@]}" --set image.tag= --show-only templates/deployment.yaml)"
+[[ "$(env_value "$untagged" SERVICE_VERSION)" == "0.1.0" ]] || fail "SERVICE_VERSION must fall back to the chart appVersion"
+# otel.enabled=false renders no OTEL_* env (SERVICE_VERSION stays).
+otel_off="$(render "${base[@]}" --set otel.enabled=false --set mcp.enabled=true --set a2a.enabled=true)"
+if grep -q 'name: OTEL_' <<<"$otel_off"; then fail "otel.enabled=false must render no OTEL_* env in any component"; fi
+grep -q 'name: SERVICE_VERSION$' <<<"$otel_off" || fail "SERVICE_VERSION must still render with otel.enabled=false"
+# The values are chart-owned: extraEnv may not set them a second time.
+for owned in OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT SERVICE_VERSION ENVIRONMENT; do
+  expect_refusal "extraEnv setting the chart-owned $owned" "extraEnv sets $owned" "${base[@]}" --set "extraEnv[0].name=$owned" --set 'extraEnv[0].value=x'
+done
+
 # --- no *_MODE, no in-memory / permissive mode anywhere -----------------------------
 render_all="$(render "${base[@]}")"
 if grep -qE '^ +(- name: )?[A-Z_]+_MODE\b' <<<"$render_all"; then fail "the render carries a *_MODE variable"; fi
@@ -164,7 +191,7 @@ expect_refusal "a blank consumer group" "config.nodeTopologyConsumerGroup" "${ba
 expect_refusal "a pod-derived consumer group" "stable" "${base[@]}" --set 'config.orderSourcingConsumerGroup=svc-$(POD_NAME)'
 
 # --- components: api only, optional ones off by default -----------------------------
-for component in mcp frontend analytics-projector analytics-reports; do
+for component in mcp a2a frontend analytics-projector analytics-reports; do
   if grep -q "app.kubernetes.io/component: $component" <<<"$render_all"; then fail "this chart has no $component component"; fi
 done
 if grep -qE 'kind: (HorizontalPodAutoscaler|Ingress|HTTPRoute)' <<<"$render_all"; then
@@ -178,14 +205,14 @@ if grep -q 'replicas:' <<<"$(render "${base[@]}" --set autoscaling.api.enabled=t
   fail "the Deployment must omit replicas when the HPA owns them"
 fi
 
-# --- optional components (ADR 0008 mcp, ADR 0009 web remote) ------------------------
+# --- optional components (ADR 0008 mcp, ADR 0009 web remote, ADR 0011 a2a) ------------------------
 
 render_only() { # render_only <template> <helm args...>
   local tpl="$1"; shift
   render "$@" --show-only "templates/$tpl"
 }
-binary_env_of() { # binary_env_of <file>: upper-case string literals of one non-test source
-  grep -ohE '"[A-Z][A-Z0-9_]{2,}"' "$1" | tr -d '"' | sort -u
+binary_env_of() { # binary_env_of <file>...: upper-case string literals of non-test sources
+  grep -ohE '"[A-Z][A-Z0-9_]{2,}"' "$@" | tr -d '"' | sort -u
 }
 assert_env_rendered() { # assert_env_rendered <rendered> <what> <vars...>
   local rendered="$1" what="$2"; shift 2
@@ -202,9 +229,15 @@ if grep -q 'configMapRef:' <<<"$mcp_dep"; then fail "mcp-deployment.yaml must no
 if grep -Eq 'name: (KAFKA_BROKERS|OUTBOX_[A-Z_]+|[A-Z]+_CONSUMER_GROUP|GENERATE_INTERVAL)$' <<<"$mcp_dep"; then
   fail "the mcp Deployment must not get Kafka/relay/consumer/horizon env (read-only, never dials Kafka)"
 fi
-mcp_vars=($(binary_env_of "$repo_dir/cmd/mcp/main.go"))
+mcp_vars=($(binary_env_of "$repo_dir/cmd/mcp/main.go" "$repo_dir/cmd/mcp/telemetry.go"))
 (( ${#mcp_vars[@]} >= 3 )) || fail "found only ${#mcp_vars[@]} env literals in cmd/mcp/main.go; the scan is looking in the wrong place"
-assert_env_rendered "$mcp_dep" "the mcp Deployment" "${mcp_vars[@]}" DATABASE_URL MIGRATIONS_DATABASE_URL
+assert_env_rendered "$mcp_dep" "the mcp Deployment" "${mcp_vars[@]}" DATABASE_URL MIGRATIONS_DATABASE_URL \
+  SERVICE_VERSION ENVIRONMENT OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT
+[[ "$(env_value "$mcp_dep" OTEL_SERVICE_NAME)" == "linehaul-transportation-mcp" ]] || fail "the mcp component must export as <otel.serviceName>-mcp"
+[[ "$(env_value "$mcp_dep" OTEL_EXPORTER_OTLP_ENDPOINT)" == "$otel_endpoint" ]] || fail "the mcp component must export to otel.endpoint"
+[[ "$(env_value "$mcp_dep" SERVICE_VERSION)" == "local" ]] || fail "the mcp SERVICE_VERSION must follow image.tag, like the api"
+mcp_named="$(render_only mcp-deployment.yaml "${base[@]}" --set mcp.enabled=true --set otel.serviceName=linehaul)"
+[[ "$(env_value "$mcp_named" OTEL_SERVICE_NAME)" == "linehaul-mcp" ]] || fail "the mcp service name must follow otel.serviceName"
 grep -A4 'name: DATABASE_URL$' <<<"$mcp_dep" | grep -q 'secretKeyRef:' || fail "the mcp DATABASE_URL must come from a Secret (secretKeyRef)"
 grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$mcp_dep" | grep -q 'optional: true' || fail "the mcp MIGRATIONS_DATABASE_URL must be optional: true"
 grep -q 'path: /healthz' <<<"$mcp_dep" || fail "the mcp probes must hit /healthz"
@@ -221,6 +254,53 @@ if grep -q 'kind: HTTPRoute' <<<"$(render "${base[@]}" --set mcp.enabled=true)";
   fail "the mcp route must be off unless mcp.route.enabled=true"
 fi
 
+# a2a: its own env, never the api ConfigMap, never Kafka (ADR 0011).
+a2a_dep="$(render_only a2a-deployment.yaml "${base[@]}" --set a2a.enabled=true)"
+grep -q 'app.kubernetes.io/component: a2a' <<<"$a2a_dep" || fail "the a2a Deployment was not rendered with a2a.enabled=true"
+grep -q 'command: \["/app/a2a"\]' <<<"$a2a_dep" || fail "the a2a Deployment must run /app/a2a"
+if grep -q 'configMapRef:' <<<"$a2a_dep"; then fail "a2a-deployment.yaml must not mount the api ConfigMap"; fi
+if grep -Eq 'name: (KAFKA_BROKERS|EVENT_PUBLISHER|OUTBOX_[A-Z_]+|[A-Z]+_CONSUMER_GROUP|GENERATE_INTERVAL)$' <<<"$a2a_dep"; then
+  fail "the a2a Deployment must not get Kafka/publisher/relay/consumer/horizon env (read-only, never dials Kafka)"
+fi
+a2a_vars=($(binary_env_of "$repo_dir/cmd/a2a/main.go" "$repo_dir/cmd/a2a/telemetry.go"))
+(( ${#a2a_vars[@]} >= 3 )) || fail "found only ${#a2a_vars[@]} env literals in cmd/a2a/main.go; the scan is looking in the wrong place"
+assert_env_rendered "$a2a_dep" "the a2a Deployment" "${a2a_vars[@]}" A2A_ADDR A2A_AGENT_URL DATABASE_URL MIGRATIONS_DATABASE_URL \
+  SERVICE_VERSION ENVIRONMENT OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT
+# Every "<VAR> is required" boot refusal of cmd/a2a must be a rendered env var
+# (the regex allows digits, or A2A_AGENT_URL would be read as A_AGENT_URL).
+a2a_required="$(grep -ohE '[A-Z][A-Z0-9_]+ is required' "$repo_dir"/cmd/a2a/main.go | awk '{print $1}' | sort -u || true)"
+[[ "$a2a_required" == *A2A_AGENT_URL* && "$a2a_required" == *DATABASE_URL* ]] \
+  || fail "the mandatory-env scan of cmd/a2a/main.go lost A2A_AGENT_URL or DATABASE_URL (got: $a2a_required)"
+assert_env_rendered "$a2a_dep" "the a2a Deployment (mandatory env)" $a2a_required
+[[ "$(env_value "$a2a_dep" OTEL_SERVICE_NAME)" == "linehaul-transportation-a2a" ]] || fail "the a2a component must export as <otel.serviceName>-a2a"
+[[ "$(env_value "$a2a_dep" OTEL_EXPORTER_OTLP_ENDPOINT)" == "$otel_endpoint" ]] || fail "the a2a component must export to otel.endpoint"
+[[ "$(env_value "$a2a_dep" SERVICE_VERSION)" == "local" ]] || fail "the a2a SERVICE_VERSION must follow image.tag, like the api"
+[[ "$(env_value "$a2a_dep" A2A_ADDR)" == ":8093" ]] || fail "A2A_ADDR must default to :8093"
+a2a_url="$(env_value "$a2a_dep" A2A_AGENT_URL || true)"
+[[ "$a2a_url" =~ ^http://linehaul-transportation-a2a\.[a-z0-9-]+\.svc\.cluster\.local:8093/$ ]] \
+  || fail "A2A_AGENT_URL must default to the in-cluster Service DNS on :8093 (got: $a2a_url)"
+a2a_override="$(render_only a2a-deployment.yaml "${base[@]}" --set a2a.enabled=true --set a2a.agentUrl=https://gw.example/api/a2a/linehaul-transportation/)"
+[[ "$(env_value "$a2a_override" A2A_AGENT_URL || true)" == "https://gw.example/api/a2a/linehaul-transportation/" ]] || fail "a2a.agentUrl must override A2A_AGENT_URL"
+a2a_named="$(render_only a2a-deployment.yaml "${base[@]}" --set a2a.enabled=true --set otel.serviceName=linehaul)"
+[[ "$(env_value "$a2a_named" OTEL_SERVICE_NAME)" == "linehaul-a2a" ]] || fail "the a2a service name must follow otel.serviceName"
+grep -A4 'name: DATABASE_URL$' <<<"$a2a_dep" | grep -q 'secretKeyRef:' || fail "the a2a DATABASE_URL must come from a Secret (secretKeyRef)"
+grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$a2a_dep" | grep -q 'optional: true' || fail "the a2a MIGRATIONS_DATABASE_URL must be optional: true"
+grep -q 'path: /healthz' <<<"$a2a_dep" || fail "the a2a probes must hit /healthz"
+a2a_svc="$(render_only a2a-service.yaml "${base[@]}" --set a2a.enabled=true)"
+grep -q 'app.kubernetes.io/component: a2a' <<<"$a2a_svc" || fail "the a2a Service must pin component=a2a"
+grep -q 'port: 8093' <<<"$a2a_svc" || fail "the a2a Service must expose :8093"
+expect_refusal "a2a enabled without a database source" "database.url or database.existingSecret" --set kafka.brokers=kafka.example.invalid:9092 --set a2a.enabled=true "${base[@]:2}"
+# The Kong route is opt-in on top of the workload, rewrites /api/a2a/<context>
+# to the JSON-RPC root / and carries no auth plugin (fleet revert).
+a2a_route="$(render_only a2a-route.yaml "${base[@]}" --set a2a.enabled=true --set a2a.route.enabled=true --set a2a.route.parentRefs[0].name=gw --set a2a.route.parentRefs[0].namespace=kong)"
+grep -q 'kind: HTTPRoute' <<<"$a2a_route" || fail "the a2a HTTPRoute did not render with a2a.route.enabled=true"
+grep -q 'replacePrefixMatch: /$' <<<"$a2a_route" || fail "the a2a route must rewrite the prefix to /"
+grep -q 'value: /api/a2a/linehaul-transportation' <<<"$a2a_route" || fail "the a2a route path must be /api/a2a/linehaul-transportation"
+if grep -qiE 'plugin|apikey|key-auth|jwt' <<<"$a2a_route"; then fail "the a2a route must carry no auth plugin"; fi
+if grep -q 'kind: HTTPRoute' <<<"$(render "${base[@]}" --set a2a.enabled=true)"; then
+  fail "the a2a route must be off unless a2a.route.enabled=true"
+fi
+
 # frontend (linehaul_mfe): static nginx bytes, no database, no Kafka, no
 # routing in this chart (ADR 0009).
 frontend_dep="$(render_only frontend-deployment.yaml "${base[@]}" --set frontend.enabled=true)"
@@ -234,8 +314,8 @@ grep -q 'path: /healthz' <<<"$frontend_dep" || fail "the frontend probes must hi
 # Every component at once: each Deployment pins its own component label, so
 # the api Service still selects exactly the api pods (the python test asserts
 # the selector mechanics; this catches a label regressed to a shared value).
-together="$(render "${base[@]}" --set mcp.enabled=true --set mcp.route.enabled=true --set mcp.route.parentRefs[0].name=gw --set mcp.route.parentRefs[0].namespace=kong --set frontend.enabled=true)"
-for component in api mcp frontend; do
+together="$(render "${base[@]}" --set mcp.enabled=true --set mcp.route.enabled=true --set mcp.route.parentRefs[0].name=gw --set mcp.route.parentRefs[0].namespace=kong --set a2a.enabled=true --set a2a.route.enabled=true --set a2a.route.parentRefs[0].name=gw --set a2a.route.parentRefs[0].namespace=kong --set frontend.enabled=true)"
+for component in api mcp a2a frontend; do
   (( $(grep -c "app.kubernetes.io/component: $component" <<<"$together") >= 2 )) \
     || fail "component $component must label both its Deployment selector and its pod template"
 done

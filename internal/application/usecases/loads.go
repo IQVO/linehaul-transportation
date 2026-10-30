@@ -106,9 +106,12 @@ func (s *Service) CloseLoad(ctx context.Context, loadID string) (views.Load, err
 }
 
 // DispatchLoad dispatches a CLOSED load and records the departure of its trip;
-// a DEPARTED load is returned unchanged.
+// a DEPARTED load is returned unchanged. Each attempt that had something to do
+// is counted once by outcome (ports.LoadMetrics).
 func (s *Service) DispatchLoad(ctx context.Context, loadID string) (views.Load, error) {
-	return s.withLoad(ctx, loadID, func(ctx context.Context, l *load.Load, d *departure.Departure) ([]shared.Event, []shared.Event, error) {
+	dispatched := false
+	v, err := s.withLoad(ctx, loadID, func(ctx context.Context, l *load.Load, d *departure.Departure) ([]shared.Event, []shared.Event, error) {
+		dispatched = false // a retry after ErrConcurrentUpdate starts over
 		if l.State() == load.StateDeparted {
 			return nil, nil, nil
 		}
@@ -118,8 +121,11 @@ func (s *Service) DispatchLoad(ctx context.Context, loadID string) (views.Load, 
 			return nil, nil, err
 		}
 		devs, err := d.RecordDeparture(now)
+		dispatched = err == nil
 		return levs, devs, err
 	})
+	s.recordDispatch(ctx, dispatched && err == nil, err)
+	return v, err
 }
 
 // ReceiveLoad receives a DEPARTED load and records the arrival of its trip; an

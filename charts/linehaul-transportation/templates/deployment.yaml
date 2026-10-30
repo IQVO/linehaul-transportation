@@ -74,6 +74,18 @@ spec:
               value: {{ .Values.config.packagesPerOrder | quote }}
             - name: SHUTDOWN_DRAIN_DELAY
               value: {{ .Values.config.shutdownDrainDelay | quote }}
+            # Observability env (fleet standard): the same three for every
+            # component, plus ENVIRONMENT for deployment.environment.name.
+            - name: ENVIRONMENT
+              value: {{ .Values.environment | quote }}
+            - name: SERVICE_VERSION
+              value: {{ .Values.image.tag | default .Chart.AppVersion | quote }}
+            {{- if .Values.otel.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otel.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.otel.serviceName | quote }}
+            {{- end }}
             # The three consumers always run. The group ids come from values,
             # never a literal, and are mandatory (the chart refuses an empty
             # one): a stable id is what makes a rescheduled pod resume from
