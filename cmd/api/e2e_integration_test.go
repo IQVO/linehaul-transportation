@@ -540,8 +540,22 @@ func assertMessage(t *testing.T, msg kafkatest.Message, row outboxRow) {
 		t.Errorf("%s: type %q id %q subject %q key %q, want the outbox row %+v", row.typ, e.Type(), e.ID(), e.Subject(), msg.Key, row)
 	}
 	assertAttributes(t, e, row)
-	if len(msg.Headers) != 1 || msg.Headers["content-type"] != cloudevents.MediaType {
-		t.Errorf("%s: headers %v", row.typ, msg.Headers)
+	assertHeaders(t, row, msg.Headers)
+}
+
+// assertHeaders pins content-type exactly and allows only the W3C trace-context
+// headers the outbox stamps beside it (ADR 0010): nothing else may appear.
+func assertHeaders(t *testing.T, row outboxRow, headers map[string]string) {
+	t.Helper()
+	if headers["content-type"] != cloudevents.MediaType {
+		t.Errorf("%s: headers %v", row.typ, headers)
+	}
+	for k := range headers {
+		switch k {
+		case "content-type", "traceparent", "tracestate", "baggage":
+		default:
+			t.Errorf("%s: unexpected header %q in %v", row.typ, k, headers)
+		}
 	}
 }
 

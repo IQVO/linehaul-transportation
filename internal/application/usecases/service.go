@@ -37,6 +37,9 @@ type Deps struct {
 	PackagesPerOrder int
 	// Logger receives the per-item refusals of the policies. Nil discards.
 	Logger *slog.Logger
+	// Metrics records the business outcome of each load dispatch; nil records
+	// nothing, so unit tests need no wiring.
+	Metrics ports.LoadMetrics
 }
 
 // Service is the application layer of linehaul-transportation.

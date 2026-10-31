@@ -1,5 +1,5 @@
 # Used by `helm lint` / `ct lint`: every optional value and component set at
-# once (api + mcp + route + frontend + ingress + gateway + HPA).
+# once (api + mcp + a2a + routes + frontend + ingress + gateway + HPA).
 database:
   url: "postgres://u@example.invalid:5432/db"
 kafka:
@@ -23,6 +23,14 @@ autoscaling:
   api:
     enabled: true
 mcp:
+  enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
+a2a:
   enabled: true
   route:
     enabled: true

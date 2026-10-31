@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/claudioed/linehaul-transportation/internal/adapters/outbound/telemetry"
 )
 
 // Boot errors for the variables the context cannot run without. Each message
@@ -143,5 +145,5 @@ func newLogger(level string) *slog.Logger {
 	if err := l.UnmarshalText([]byte(level)); err != nil {
 		l = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: l}))
+	return slog.New(telemetry.WithTraceContext(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: l})))
 }
