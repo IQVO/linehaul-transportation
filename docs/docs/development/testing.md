@@ -59,6 +59,8 @@ Pre-commit (lefthook) runs `fmt-check`, `vet` and `lint`; install the hooks with
 
 ## CI jobs (`.github/workflows/ci.yml`)
 
+The workflow runs on pushes and pull requests to `main` and `develop`, weekly (Monday 06:00 UTC) and on manual dispatch. "Push and pull request" below means those branches.
+
 | Job | Runs | When |
 | --- | --- | --- |
 | `lint` | golangci-lint | push and pull request |

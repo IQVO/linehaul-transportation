@@ -35,7 +35,12 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
-        <p className={styles.heroLead}>TODO-LEAD</p>
+        <p className={styles.heroLead}>
+          Linehaul Transportation turns the lanes of the retail network into a rolling 14-day horizon of scheduled
+          departures with honest package capacity, books locked fulfillment assignments onto pickup departures, and
+          records the loads that are closed, dispatched and received. It runs on real Postgres and Kafka, publishes
+          every change as a CloudEvents event, and serves read-only REST, MCP and A2A surfaces.
+        </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/overview/introduction">
             Read the docs

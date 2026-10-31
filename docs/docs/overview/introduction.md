@@ -30,7 +30,7 @@ cancelling the future ones when the node is suspended or retired. The pickup dep
 | Concept | Meaning |
 | --- | --- |
 | **LaneSchedule** | The weekly template of one lane: slots with day, local cutoff, departs and arrives time and package capacity. ACTIVE or RETIRED. |
-| **Departure** | One concrete trip: kind `PICKUP`, `LINEHAUL` or `AIR`, cutoff, departs, arrives, capacity and booked count; state SCHEDULED, CLOSED, DEPARTED, ARRIVED or CANCELLED. Invariant: booked <= capacity. |
+| **Departure** | One concrete trip: kind `PICKUP`, `LINEHAUL` or `AIR`, cutoff, departs, arrives, capacity and booked count; state SCHEDULED, CLOSED, DEPARTED, ARRIVED or CANCELLED. Invariant: `booked <= capacity`. |
 | **Load** | The packages (tracking numbers) consolidated on one departure at its origin node: OPEN, CLOSED, DEPARTED, ARRIVED. A package is on at most one OPEN or CLOSED load. |
 | **ExpectedVolume** | The local record of one fulfillment assignment and where it is booked (UNKNOWN, RELEASED, BOOKED, FAILED, CANCELLED). |
 | Local read models | `node_views` and `lane_views`, copies of node-topology facts fed by events. |

@@ -33,7 +33,7 @@ Following the ddd-crew [Aggregate Design Canvas](https://github.com/ddd-crew/agg
 | Name | `LaneSchedule` (root id `laneId`) |
 | Description | The weekly template of one lane: 1 to 100 slots |
 | State | `ACTIVE`, `RETIRED`; `ACTIVE -> RETIRED` |
-| Enforced invariants | Slots of one weekday do not overlap; each slot has cutoff <= departs (`HH:mm`), capacity >= 1; a RETIRED schedule cannot be redefined |
+| Enforced invariants | Slots of one weekday do not overlap; each slot has `cutoff <= departs` (`HH:mm`), capacity >= 1; a RETIRED schedule cannot be redefined |
 | Commands | `Define` (create), `Redefine` (replace the slots of an ACTIVE schedule), `Retire` |
 | Events raised | none (the departures it generates raise `DepartureScheduled`) |
 | Concurrency | `version`; slots are one JSONB array, always read and written whole |
@@ -45,7 +45,7 @@ Following the ddd-crew [Aggregate Design Canvas](https://github.com/ddd-crew/agg
 | Name | `Load` (root id `loadId`, `load-<uuid>`) |
 | Description | The tracking numbers consolidated on one departure at its origin node |
 | State | `OPEN`, `CLOSED`, `DEPARTED`, `ARRIVED`; `OPEN -> CLOSED -> DEPARTED -> ARRIVED` |
-| Enforced invariants | A departure has at most one load (unique `loads.departure_id`); a tracking number is on at most one OPEN or CLOSED load (partial unique index); package count <= departure capacity; the departure must be SCHEDULED to open, add to or close the load; 1 to 64 character tracking numbers |
+| Enforced invariants | A departure has at most one load (unique `loads.departure_id`); a tracking number is on at most one OPEN or CLOSED load (partial unique index); package count at most the departure capacity; the departure must be SCHEDULED to open, add to or close the load; 1 to 64 character tracking numbers |
 | Commands | `Open`, `AddPackage`, `Close`, `Dispatch`, `Receive` |
 | Events raised | `LoadClosed`, `LoadDeparted`, `LoadArrived` |
 | Errors | `ErrPackageAlreadyLoaded`, `ErrLoadOverCapacity`, `ErrLoadAlreadyExists`, illegal transition |

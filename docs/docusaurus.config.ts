@@ -6,7 +6,7 @@ import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';
 const config: Config = {
   title: 'Linehaul Transportation',
   tagline:
-    'Linehaul Transportation: a Supporting bounded context of the retail-network domain (warehouse-systems).',
+    'The middle mile of the retail network: scheduled departures, booked capacity and loads (a Supporting bounded context).',
   favicon: 'img/favicon.svg',
 
   future: {
