@@ -1,3 +1,10 @@
+---
+id: before-first-release
+title: Before the first release
+sidebar_label: Before the first release
+description: "Packaging checklist for the first merge to main: Dockerfile, Helm chart, tests and CI jobs."
+---
+
 # Before the first release: linehaul-transportation
 
 The first merge to `main` runs `docker-publish` and `release`. Two services built from
@@ -13,7 +20,7 @@ the fleet reference). The chart is NOT generated: it is shaped by what the servi
 `IQVO/pick-face-replenishment` (Kafka consumers, MCP, analytics, frontend) and
 `IQVO/task-interleaving`.
 
-**Status in the retail-network study build.** Done: Dockerfile and `.dockerignore`, real runtime only (row 1), CI mutation, integration and vuln jobs, and the Helm chart (rows 5-9, evidence in each row). Not applicable: the frontend row (no frontend in this service) and the MCP row (none is served). Row 11 (registry secrets) is for the repo admin: it cannot be checked from the repository.
+**Status in the retail-network study build.** Done: Dockerfile and `.dockerignore` (one image holding `/app/api`, `/app/mcp` and `/app/a2a`, entrypoint `./api`), real runtime only (row 1), CI mutation, integration and vuln jobs, and the Helm chart (rows 5-9, evidence in each row). The MCP server (`cmd/mcp`), the A2A agent (`cmd/a2a`) and the console remote (`web/`) have been added since this checklist was written; each is an opt-in chart component (`mcp.enabled`, `a2a.enabled`, `frontend.enabled`) and none changes the rows below. Row 11 (registry secrets) is for the repo admin: it cannot be checked from the repository.
 
 | # | Item | Done when | Guarded by |
 |---|------|-----------|------------|
