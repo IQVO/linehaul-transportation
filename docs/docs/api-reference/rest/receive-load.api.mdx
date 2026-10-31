@@ -1,0 +1,70 @@
+---
+id: receive-load
+title: "Receive a load at its destination node (ReceiveLoad)"
+description: "DEPARTED to ARRIVED; records the arrival of the trip (RecordArrival) and publishes LoadArrived (with departureKind and nodeType), which last-mile-delivery uses to induct the packages at a delivery station, and DepartureArrived. Receiving an ARRIVED load returns it unchanged."
+sidebar_label: "Receive a load at its destination node (ReceiveLoad)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/linehaul-transportation-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Receive a load at its destination node (ReceiveLoad)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/loads/{loadId}:receive"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+DEPARTED to ARRIVED; records the arrival of the trip (RecordArrival) and publishes LoadArrived (with departureKind and nodeType), which last-mile-delivery uses to induct the packages at a delivery station, and DepartureArrived. Receiving an ARRIVED load returns it unchanged.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./receive-load.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./receive-load.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./receive-load.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

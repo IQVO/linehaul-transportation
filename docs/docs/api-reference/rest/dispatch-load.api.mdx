@@ -1,0 +1,70 @@
+---
+id: dispatch-load
+title: "Dispatch a closed load (DispatchLoad)"
+description: "CLOSED to DEPARTED; records the departure of the trip (RecordDeparture) and publishes LoadDeparted (with departureKind and nodeType) and DepartureDeparted. Dispatching a DEPARTED load returns it unchanged."
+sidebar_label: "Dispatch a closed load (DispatchLoad)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/linehaul-transportation-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Dispatch a closed load (DispatchLoad)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/loads/{loadId}:dispatch"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+CLOSED to DEPARTED; records the departure of the trip (RecordDeparture) and publishes LoadDeparted (with departureKind and nodeType) and DepartureDeparted. Dispatching a DEPARTED load returns it unchanged.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./dispatch-load.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./dispatch-load.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./dispatch-load.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      
