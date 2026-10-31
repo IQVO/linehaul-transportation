@@ -1,0 +1,70 @@
+---
+id: retire-lane-schedule
+title: "Retire the schedule of a lane (RetireLaneSchedule)"
+description: "Moves the schedule from ACTIVE to RETIRED; GenerateDepartures skips it from now on and the departures already generated stay. Retiring a RETIRED schedule returns it unchanged. Raises no event."
+sidebar_label: "Retire the schedule of a lane (RetireLaneSchedule)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/linehaul-transportation-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Retire the schedule of a lane (RetireLaneSchedule)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/lane-schedules/{laneId}:retire"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Moves the schedule from ACTIVE to RETIRED; GenerateDepartures skips it from now on and the departures already generated stay. Retiring a RETIRED schedule returns it unchanged. Raises no event.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./retire-lane-schedule.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./retire-lane-schedule.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./retire-lane-schedule.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

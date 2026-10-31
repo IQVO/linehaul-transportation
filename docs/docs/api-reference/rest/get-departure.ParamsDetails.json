@@ -1,0 +1,1 @@
+{"parameters":[{"name":"departureId","in":"path","required":true,"description":"Departure id.","schema":{"type":"string"}}]}
