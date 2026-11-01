@@ -41,7 +41,7 @@ CloudEvents 1.0 only; read `.claude/rules/integration-events.md` and `.claude/ru
    CloudEvents id is claimed in `processed_events` in the same transaction as the effect.
 3. Register the type in the producer's handler map (`NodeTopologyHandlers`, `OrderSourcingHandlers`, `ShippingHandlers`) or, for a new producer,
    a new consumer in `NewConsumers` with its own mandatory `*_CONSUMER_GROUP` variable in `cmd/api/config.go` (a boot error naming it), listed in
-   `docs/runtime.md`, the README and ADR 0003. A group id is never a string literal (`TestKafkaConsumerGroupNeverHardcodedInline`).
+   `docs/docs/overview/runtime.md`, the README and ADR 0003. A group id is never a string literal (`TestKafkaConsumerGroupNeverHardcodedInline`).
 4. Add the receive operation and the fields you rely on to `apis/asyncapi.yaml`, and update ADR 0003.
 5. Test: a case in `internal/adapters/inbound/kafka/handlers_test.go` (decoding and effect over the memory doubles), the use case in
    `internal/application/usecases/consumers_test.go`, a scenario in `features/` if it changes behaviour, and
