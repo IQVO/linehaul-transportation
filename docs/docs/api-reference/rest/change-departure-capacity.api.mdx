@@ -1,0 +1,70 @@
+---
+id: change-departure-capacity
+title: "Change the package capacity of a scheduled departure (ChangeDepartureCapacity)"
+description: "Planner command added by gap G28. Allowed on a SCHEDULED departure; the new capacity may not be below the packages already booked (departure-full). Publishes DepartureCapacityChanged. A capacity equal to the current one changes nothing and publishes nothing. A load that is already open keeps the capacity snapshot it took at OpenLoad."
+sidebar_label: "Change the package capacity of a scheduled departure (ChangeDepartureCapacity)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/linehaul-transportation-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Change the package capacity of a scheduled departure (ChangeDepartureCapacity)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/departures/{departureId}:change-capacity"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Planner command added by gap G28. Allowed on a SCHEDULED departure; the new capacity may not be below the packages already booked (departure-full). Publishes DepartureCapacityChanged. A capacity equal to the current one changes nothing and publishes nothing. A load that is already open keeps the capacity snapshot it took at OpenLoad.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./change-departure-capacity.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./change-departure-capacity.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./change-departure-capacity.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

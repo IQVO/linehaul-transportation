@@ -1,0 +1,70 @@
+---
+id: open-load
+title: "Open a load on a departure (OpenLoad)"
+description: "Opens the load of a SCHEDULED departure, copying the origin, destination, departure kind, node types and the capacity of the departure into the load. A departure has at most one load (load-already-exists). Raises no event."
+sidebar_label: "Open a load on a departure (OpenLoad)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/linehaul-transportation-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Open a load on a departure (OpenLoad)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/loads"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Opens the load of a SCHEDULED departure, copying the origin, destination, departure kind, node types and the capacity of the departure into the load. A departure has at most one load (load-already-exists). Raises no event.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./open-load.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./open-load.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./open-load.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

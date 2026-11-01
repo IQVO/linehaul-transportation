@@ -20,7 +20,7 @@ Guides: `python3 scripts/harness/repo_lint.py`, `python3 scripts/harness/guide_l
 ## Runtime rule
 Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS`, `NODE_TOPOLOGY_CONSUMER_GROUP`, `ORDER_SOURCING_CONSUMER_GROUP`, `SHIPPING_AND_TRACKING_CONSUMER_GROUP` are mandatory (boot error naming the variable, before the listener binds).
 The outbox relay is always on (`OUTBOX_MAX_ATTEMPTS` default 20, 0 = unlimited). `GENERATE_INTERVAL` (1h) rolls the horizon; `PACKAGES_PER_ORDER` (1) converts orders to packages (A9).
-`/healthz` = liveness; `/readyz` = drain gate + Postgres ping + Kafka metadata with an EMPTY non-nil topic list. cmd/** never imports the memory or repocontract packages. No authentication on REST. See docs/runtime.md.
+`/healthz` = liveness; `/readyz` = drain gate + Postgres ping + Kafka metadata with an EMPTY non-nil topic list. cmd/** never imports the memory or repocontract packages. No authentication on REST. See docs/docs/overview/runtime.md.
 
 ## REST
 chi router for every operation of apis/openapi.yaml (11 routes: lane schedules, departures incl. `:cancel` and `:change-capacity`, loads incl. `/packages`, `:close`, `:dispatch`, `:receive`) plus /healthz, /readyz.

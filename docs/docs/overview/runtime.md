@@ -1,8 +1,20 @@
+---
+id: runtime
+title: Runtime
+sidebar_label: Runtime
+description: "Configuration, probes, shutdown order, Helm chart and the outbox and consumers in operation."
+---
+
 # Runtime: configuration, probes, shutdown and the outbox
 
-`cmd/api` is the only binary. It runs on real PostgreSQL and real Kafka; there is no alternative runtime and no log sink.
+`cmd/api` is the writing binary: REST, the Kafka consumers, the outbox relay and the horizon roll. `cmd/mcp` and `cmd/a2a` are read-only siblings
+that share its Postgres and never touch Kafka. All three run on real PostgreSQL; `cmd/api` also on real Kafka. There is no alternative runtime and no log
+sink. The complete variable list per binary is on [Configuration](/docs/operations/configuration); this page explains how they behave.
 
-## Environment
+## Environment (`cmd/api`)
+
+The table lists `cmd/api`. `cmd/mcp` and `cmd/a2a` read a subset (`DATABASE_URL`, `MIGRATIONS_DATABASE_URL`, `LOG_LEVEL`, the OTel variables and their
+own listen address); see [Configuration](/docs/operations/configuration).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -40,7 +52,9 @@ The grace period of a pod must exceed the sum of these bounds (5 + 10 + 10 s).
 
 `charts/linehaul-transportation` deploys `cmd/api` as a single `api` Deployment with a Service, a ConfigMap, a Secret (or your own via
 `database.existingSecret`) and a ServiceAccount; the HPA (`autoscaling.api.enabled`), Ingress and Gateway API HTTPRoute
-(`gatewayApi.enabled`) are optional and off by default. There is no MCP, frontend, projector or reports component.
+(`gatewayApi.enabled`) are optional and off by default. Three more components are opt-in and default off: `mcp.enabled` (`cmd/mcp`, port 8090),
+`a2a.enabled` (`cmd/a2a`, port 8093, needs `A2A_AGENT_URL`, defaulted from the Service DNS) and `frontend.enabled` (nginx with the console remote). There is no
+projector or reports component.
 
 - **Mandatory values** (the render fails and names them): `database.url` or `database.existingSecret`, `kafka.brokers`,
   `config.nodeTopologyConsumerGroup`, `config.orderSourcingConsumerGroup`, `config.shippingAndTrackingConsumerGroup`. A consumer group must be
@@ -96,4 +110,4 @@ The grace period of a pod must exceed the sum of these bounds (5 + 10 + 10 s).
 `make check` (format, vet, build, lint, unit + handler + BDD tests), `make coverage` (90% over `internal/domain` and
 `internal/application`), `make mutation` (gremlins per domain package), `make arch-test` (fitness), `make integration` (testcontainers
 Postgres + Kafka: repositories, the relay, the middleware, the consumers and the real-wiring test `cmd/api/e2e_integration_test.go`;
-needs Docker).
+needs Docker). See [Testing](/docs/development/testing).

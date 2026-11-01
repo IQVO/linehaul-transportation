@@ -1,0 +1,70 @@
+---
+id: close-load
+title: "Close an open load (CloseLoad)"
+description: "OPEN to CLOSED; closes the departure of the load (CloseDeparture) and publishes LoadClosed on the analytics stream. Closing a CLOSED load returns it unchanged."
+sidebar_label: "Close an open load (CloseLoad)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/linehaul-transportation-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Close an open load (CloseLoad)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/loads/{loadId}:close"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+OPEN to CLOSED; closes the departure of the load (CloseDeparture) and publishes LoadClosed on the analytics stream. Closing a CLOSED load returns it unchanged.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./close-load.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./close-load.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./close-load.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      
