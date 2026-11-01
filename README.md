@@ -23,22 +23,22 @@ This project is a domain-driven design study. It is not associated with, endorse
 
 ## Documentation
 
-This repo has no docs site of its own. The context's design lives on the
-warehouse-docs retail-network pages:
+The documentation site of this repository: **<https://iqvo.github.io/linehaul-transportation/>** (source in [`docs/`](docs/), built with Docusaurus, deployed on every push to `main`).
+Build it locally with `cd docs && npm ci && npm start`.
 
 | Area | Pages |
 |---|---|
-| Retail network | [Network overview](https://iqvo.github.io/warehouse-docs/network) |
-| This context | [Index / service facts](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation), [Business context](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/business-context), [Domain events](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/domain-events), [Use cases](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/use-cases) |
-| DDD artifact pack | [Ubiquitous language](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/ubiquitous-language), [Context map](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/context-map), [Core domain chart](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/core-domain-chart), [Bounded context canvas](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/bounded-context-canvas), [Aggregate design canvas](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/aggregate-design-canvas), [EventStorming](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/eventstorming), [Class diagram](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/class-diagram), [Sequence diagrams](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/sequence-diagrams), [ER diagram](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/entity-relationship), [Domain message flow](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation/domain-message-flow) |
-| Decisions | [Network ADRs](https://iqvo.github.io/warehouse-docs/network/adr) |
+| Overview | [Introduction](https://iqvo.github.io/linehaul-transportation/docs/overview/introduction), [Architecture](https://iqvo.github.io/linehaul-transportation/docs/overview/architecture), [Runtime](https://iqvo.github.io/linehaul-transportation/docs/overview/runtime), [Quickstart](https://iqvo.github.io/linehaul-transportation/docs/overview/quickstart) |
+| Operations | [Configuration](https://iqvo.github.io/linehaul-transportation/docs/operations/configuration), [Runbook](https://iqvo.github.io/linehaul-transportation/docs/operations/runbook), [Observability](https://iqvo.github.io/linehaul-transportation/docs/operations/observability), [Troubleshooting](https://iqvo.github.io/linehaul-transportation/docs/operations/troubleshooting), [Before the first release](https://iqvo.github.io/linehaul-transportation/docs/operations/before-first-release) |
+| Development | [Testing](https://iqvo.github.io/linehaul-transportation/docs/development/testing) |
+| Domain-driven design | [Use cases](https://iqvo.github.io/linehaul-transportation/docs/ddd/use-cases), [Subdomain classification](https://iqvo.github.io/linehaul-transportation/docs/ddd/subdomain-classification), [Ubiquitous language](https://iqvo.github.io/linehaul-transportation/docs/ddd/ubiquitous-language), [DDD artifacts](https://iqvo.github.io/linehaul-transportation/docs/ddd/ddd-artifacts) |
+| DDD pack | [Core domain chart](https://iqvo.github.io/linehaul-transportation/docs/ddd/core-domain-chart), [Bounded context canvas](https://iqvo.github.io/linehaul-transportation/docs/ddd/bounded-context-canvas), [Context map](https://iqvo.github.io/linehaul-transportation/docs/ddd/context-map), [Aggregate design canvas](https://iqvo.github.io/linehaul-transportation/docs/ddd/aggregate-design-canvas), [Domain message flow](https://iqvo.github.io/linehaul-transportation/docs/ddd/domain-message-flow), [EventStorming](https://iqvo.github.io/linehaul-transportation/docs/ddd/eventstorming), [Class diagram](https://iqvo.github.io/linehaul-transportation/docs/ddd/class-diagram), [Entity-relationship](https://iqvo.github.io/linehaul-transportation/docs/ddd/entity-relationship), [Sequence diagrams](https://iqvo.github.io/linehaul-transportation/docs/ddd/sequence-diagrams), [Domain events](https://iqvo.github.io/linehaul-transportation/docs/ddd/domain-events) |
+| API reference | [API overview](https://iqvo.github.io/linehaul-transportation/docs/api-reference), [Events](https://iqvo.github.io/linehaul-transportation/docs/api-reference/events), [REST reference](https://iqvo.github.io/linehaul-transportation/docs/api-reference/rest/linehaul-transportation-api) |
+| Ecosystem | [Integration](https://iqvo.github.io/linehaul-transportation/docs/ecosystem/integration), [MCP tools](https://iqvo.github.io/linehaul-transportation/docs/mcp/tools) |
+| Decisions | [ADR index](https://iqvo.github.io/linehaul-transportation/docs/adr) ([`docs/adr/`](docs/adr/index.md)) |
 
-In-tree: [`docs/adr/`](docs/adr/index.md) (decisions, index),
-[`docs/runtime.md`](docs/runtime.md) (settings, probes, shutdown order,
-outbox and dead-letter runbook, Helm chart),
-[`docs/operations/runbook.md`](docs/operations/runbook.md),
-[`docs/before-first-release.md`](docs/before-first-release.md) (packaging
-checklist).
+The network-level view of this context (its neighbours and the model it is built from) is on the
+[retail-network pages of warehouse-docs](https://iqvo.github.io/warehouse-docs/network/contexts/linehaul-transportation).
 
 ---
 
@@ -120,14 +120,14 @@ migrations run at boot and the outbox relay is always on.
 
 ```sh
 export DATABASE_URL=postgres://user:***@localhost:5432/linehaul?sslmode=disable
-export KAFKA_BROKERS=localhost:29092   # whatever your broker advertises
+export KAFKA_BROKERS=localhost:9092    # the platform's single broker from the kind cluster, or your own
 export NODE_TOPOLOGY_CONSUMER_GROUP=linehaul-transportation-node-topology
 export ORDER_SOURCING_CONSUMER_GROUP=linehaul-transportation-order-sourcing
 export SHIPPING_AND_TRACKING_CONSUMER_GROUP=linehaul-transportation-shipping
 go run ./cmd/api                       # listens on :8080 (HTTP_ADDR)
 ```
 
-All settings, the probes, the shutdown order and the outbox and dead-letter runbook: [docs/runtime.md](docs/runtime.md).
+All settings, the probes, the shutdown order and the outbox and dead-letter runbook: [Runtime](https://iqvo.github.io/linehaul-transportation/docs/overview/runtime) and [Configuration](https://iqvo.github.io/linehaul-transportation/docs/operations/configuration).
 
 ### Configuration
 
@@ -201,7 +201,7 @@ Values that matter: `database.url` / `database.existingSecret`, `kafka.brokers`,
 and the optional `mcp`, `a2a` and `frontend` components (default off). Render invariants are asserted by
 `charts/linehaul-transportation/tests/render_test.sh` and `test_service_selectors.py` (every Service selects exactly one Deployment), over
 `ci/default-values.yaml` and `ci/all-components-values.yaml`. Linted in CI with
-`ct lint --charts charts/linehaul-transportation`. Chart values, hardening and the grace-period rule: [docs/runtime.md](docs/runtime.md#deployment-helm-chart).
+`ct lint --charts charts/linehaul-transportation`. Chart values, hardening and the grace-period rule: [Runtime](https://iqvo.github.io/linehaul-transportation/docs/overview/runtime#deployment-helm-chart).
 
 ### Running the MCP server in Kubernetes
 
