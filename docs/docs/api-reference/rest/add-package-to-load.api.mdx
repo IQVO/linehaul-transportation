@@ -1,0 +1,70 @@
+---
+id: add-package-to-load
+title: "Add a package to an open load (AddPackage)"
+description: "Refused with 409 package-already-loaded (ErrPackageAlreadyLoaded) if the tracking number is on another OPEN or CLOSED load, and with 409 load-over-capacity (ErrLoadOverCapacity) if the load would exceed its capacity snapshot. On a LINEHAUL or AIR departure the package is also booked on the departure (gap G15): 409 departure-full or departure-closed when it cannot be. On a PICKUP departure the booking was made at FulfillmentLocked and booked does not change. Adding a tracking number that is already on this load changes nothing."
+sidebar_label: "Add a package to an open load (AddPackage)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/linehaul-transportation-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Add a package to an open load (AddPackage)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/loads/{loadId}/packages"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Refused with 409 package-already-loaded (ErrPackageAlreadyLoaded) if the tracking number is on another OPEN or CLOSED load, and with 409 load-over-capacity (ErrLoadOverCapacity) if the load would exceed its capacity snapshot. On a LINEHAUL or AIR departure the package is also booked on the departure (gap G15): 409 departure-full or departure-closed when it cannot be. On a PICKUP departure the booking was made at FulfillmentLocked and booked does not change. Adding a tracking number that is already on this load changes nothing.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./add-package-to-load.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./add-package-to-load.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./add-package-to-load.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

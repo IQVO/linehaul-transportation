@@ -1,0 +1,70 @@
+---
+id: cancel-departure
+title: "Cancel a scheduled departure (CancelDeparture)"
+description: "Moves a SCHEDULED departure to CANCELLED and publishes DepartureCancelled, which delivery-promise and order-sourcing use to re-promise. Every assignment booked on the departure is rebooked onto the next departure from the same origin (BookingMoved) or reported as BookingFailed when none fits. Cancel before cutoffAt wherever possible. Cancelling a CANCELLED departure returns it unchanged."
+sidebar_label: "Cancel a scheduled departure (CancelDeparture)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/linehaul-transportation-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Cancel a scheduled departure (CancelDeparture)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/departures/{departureId}:cancel"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Moves a SCHEDULED departure to CANCELLED and publishes DepartureCancelled, which delivery-promise and order-sourcing use to re-promise. Every assignment booked on the departure is rebooked onto the next departure from the same origin (BookingMoved) or reported as BookingFailed when none fits. Cancel before cutoffAt wherever possible. Cancelling a CANCELLED departure returns it unchanged.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./cancel-departure.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./cancel-departure.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./cancel-departure.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      
