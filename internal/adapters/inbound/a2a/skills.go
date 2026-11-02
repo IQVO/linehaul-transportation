@@ -32,6 +32,7 @@ const tracerName = "github.com/claudioed/linehaul-transportation/internal/adapte
 const (
 	skillListDepartures = "list_departures"
 	skillGetDeparture   = "get_departure"
+	mediaTypeJSON       = "application/json"
 )
 
 // skillRequest is the wire contract of every skill call: the first message

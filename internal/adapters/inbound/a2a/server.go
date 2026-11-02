@@ -82,8 +82,8 @@ func Card(cfg Config) *a2a.AgentCard {
 		SupportedInterfaces: []*a2a.AgentInterface{
 			a2a.NewAgentInterface(cfg.AgentURL, a2a.TransportProtocolJSONRPC),
 		},
-		DefaultInputModes:  []string{"application/json", "text/plain"},
-		DefaultOutputModes: []string{"application/json", "text/plain"},
+		DefaultInputModes:  []string{mediaTypeJSON, "text/plain"},
+		DefaultOutputModes: []string{mediaTypeJSON, "text/plain"},
 		Capabilities:       a2a.AgentCapabilities{Streaming: false},
 		Skills: []a2a.AgentSkill{
 			{
@@ -91,7 +91,7 @@ func Card(cfg Config) *a2a.AgentCard {
 				Name:        "Find departures and their remaining capacity",
 				Description: "Read the departure horizon by cutoffAt (then departureId), optionally only departures leaving one origin node (origin), bound for one destination node (destination) and/or whose cutoffAt falls in a window [from, to) (RFC 3339 instants, from inclusive, to exclusive); at most limit rows (1..1000, default 500). Each departure carries its lane, kind (PICKUP, LINEHAUL, AIR), nodes, cutoff/departs/arrives, capacity, booked and remaining packages and state (SCHEDULED, CLOSED, DEPARTED, ARRIVED, CANCELLED). Persists nothing.",
 				Tags:        []string{"linehaul", "departures", "capacity", "read"},
-				InputModes:  []string{"application/json"},
+				InputModes:  []string{mediaTypeJSON},
 				Examples: []string{
 					`{"skill":"list_departures","arguments":{}}`,
 					`{"skill":"list_departures","arguments":{"origin":"n-a","from":"2026-10-24T08:00:00Z","to":"2026-10-25T08:00:00Z","limit":20}}`,
@@ -102,7 +102,7 @@ func Card(cfg Config) *a2a.AgentCard {
 				Name:        "Look up where one departure stands",
 				Description: "Read one departure by its departureId: lane, kind, origin and destination nodes, cutoffAt (no booking after it), departsAt, arrivesAt, capacityPackages, bookedPackages, remainingPackages and state, plus cancelReason and cancelledAt once cancelled, departedAt once it left and arrivedAt once it arrived. Answers a 404 problem when no departure has that id. Persists nothing.",
 				Tags:        []string{"linehaul", "departures", "status", "read"},
-				InputModes:  []string{"application/json"},
+				InputModes:  []string{mediaTypeJSON},
 				Examples: []string{
 					`{"skill":"get_departure","arguments":{"departureId":"dep-7f3a"}}`,
 				},
