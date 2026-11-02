@@ -42,7 +42,7 @@ func decodeBody(r *http.Request, dest any) error {
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
-		return fmt.Errorf("%w: %v", errMalformedRequest, err)
+		return fmt.Errorf("%w: %w", errMalformedRequest, err)
 	}
 	if dec.More() {
 		return fmt.Errorf("%w: trailing data after the JSON body", errMalformedRequest)

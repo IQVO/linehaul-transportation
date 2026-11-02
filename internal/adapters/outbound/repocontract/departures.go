@@ -69,7 +69,7 @@ func seedDepartures(t *testing.T, f Fixture) {
 	ctx := context.Background()
 	for _, d := range []*departure.Departure{
 		NewDeparture(t, "dep-b", "n-1", departure.KindPickup, 3*time.Hour, 5),
-		NewDeparture(t, "dep-a", "n-1", departure.KindPickup, 3*time.Hour, 5),
+		NewDeparture(t, depA, "n-1", departure.KindPickup, 3*time.Hour, 5),
 		NewDeparture(t, "dep-c", "n-2", departure.KindLinehaul, 5*time.Hour, 5),
 		NewDeparture(t, "dep-d", "n-1", departure.KindAir, 8*time.Hour, 1),
 	} {
@@ -96,14 +96,14 @@ func depFilters(t *testing.T, f Fixture) {
 	}{
 		{"none", repository.DepartureFilter{}, "dep-a dep-b dep-c dep-d"},
 		{"origin", repository.DepartureFilter{Origin: "n-1"}, "dep-a dep-b dep-d"},
-		{"destination", repository.DepartureFilter{Destination: "n-sc"}, "dep-a dep-b dep-c dep-d"},
+		{"destination", repository.DepartureFilter{Destination: nodeSC}, "dep-a dep-b dep-c dep-d"},
 		{"destination miss", repository.DepartureFilter{Destination: "n-x"}, ""},
-		{"kind", repository.DepartureFilter{Kind: departure.KindPickup}, "dep-a dep-b"},
+		{"kind", repository.DepartureFilter{Kind: departure.KindPickup}, depAB},
 		{"state", repository.DepartureFilter{State: departure.StateCancelled}, "dep-c"},
 		{"from inclusive", repository.DepartureFilter{CutoffFrom: at.Add(5 * time.Hour)}, "dep-c dep-d"},
-		{"to exclusive", repository.DepartureFilter{CutoffTo: at.Add(5 * time.Hour)}, "dep-a dep-b"},
-		{"window", repository.DepartureFilter{CutoffFrom: at.Add(3 * time.Hour), CutoffTo: at.Add(8 * time.Hour)}, "dep-a dep-b dep-c"},
-		{"combined", repository.DepartureFilter{Origin: "n-1", Kind: departure.KindPickup, State: departure.StateScheduled}, "dep-a dep-b"},
+		{"to exclusive", repository.DepartureFilter{CutoffTo: at.Add(5 * time.Hour)}, depAB},
+		{"window", repository.DepartureFilter{CutoffFrom: at.Add(3 * time.Hour), CutoffTo: at.Add(8 * time.Hour)}, depABC},
+		{"combined", repository.DepartureFilter{Origin: "n-1", Kind: departure.KindPickup, State: departure.StateScheduled}, depAB},
 	}
 	for _, c := range cases {
 		if got := list(t, f, c.filter); got != c.want {
@@ -114,15 +114,15 @@ func depFilters(t *testing.T, f Fixture) {
 
 func depOrderAndLimit(t *testing.T, f Fixture) {
 	seedDepartures(t, f)
-	if got := list(t, f, repository.DepartureFilter{Limit: 3}); got != "dep-a dep-b dep-c" {
+	if got := list(t, f, repository.DepartureFilter{Limit: 3}); got != depABC {
 		t.Fatalf("limit 3: %q", got)
 	}
-	if got := list(t, f, repository.DepartureFilter{Limit: 1}); got != "dep-a" {
+	if got := list(t, f, repository.DepartureFilter{Limit: 1}); got != depA {
 		t.Fatalf("limit 1: %q", got)
 	}
 	// Keyset: (cutoffAt, id) strictly after the cursor; dep-a and dep-b tie on the cutoff.
 	cut := at.Add(3 * time.Hour)
-	if got := list(t, f, repository.DepartureFilter{After: &repository.DepartureCursor{CutoffAt: cut, ID: "dep-a"}}); got != "dep-b dep-c dep-d" {
+	if got := list(t, f, repository.DepartureFilter{After: &repository.DepartureCursor{CutoffAt: cut, ID: depA}}); got != "dep-b dep-c dep-d" {
 		t.Fatalf("after dep-a: %q", got)
 	}
 	if got := list(t, f, repository.DepartureFilter{After: &repository.DepartureCursor{CutoffAt: cut, ID: "dep-b"}, Limit: 1}); got != "dep-c" {
@@ -141,13 +141,13 @@ func depRoomAndAfter(t *testing.T, f Fixture) {
 	full, _ := f.Departures.Get(context.Background(), "dep-d")
 	_, _ = full.Book(at)
 	noErr(t, f.Departures.Save(context.Background(), full))
-	if got := list(t, f, repository.DepartureFilter{HasRoom: true}); got != "dep-a dep-b dep-c" {
+	if got := list(t, f, repository.DepartureFilter{HasRoom: true}); got != depABC {
 		t.Fatalf("HasRoom: %q", got)
 	}
 	if got := list(t, f, repository.DepartureFilter{CutoffAfter: at.Add(3 * time.Hour)}); got != "dep-c dep-d" {
 		t.Fatalf("CutoffAfter is exclusive: %q", got)
 	}
-	if got := list(t, f, repository.DepartureFilter{CutoffAfter: at.Add(3*time.Hour - time.Second), Limit: 1}); got != "dep-a" {
+	if got := list(t, f, repository.DepartureFilter{CutoffAfter: at.Add(3*time.Hour - time.Second), Limit: 1}); got != depA {
 		t.Fatalf("CutoffAfter just before: %q", got)
 	}
 }

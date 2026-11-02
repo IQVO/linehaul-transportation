@@ -216,19 +216,18 @@ func (s *Service) HandleLaneClosed(ctx context.Context, eventID string, in LaneI
 }
 
 // volumeRow loads the ExpectedVolume of an assignment, or a new UNKNOWN one.
-func (s *Service) volumeRow(ctx context.Context, assignmentID string) (vol *volume.ExpectedVolume, created bool, err error) {
-	vol, err = s.Volumes.Get(ctx, assignmentID)
+func (s *Service) volumeRow(ctx context.Context, assignmentID string) (*volume.ExpectedVolume, error) {
+	vol, err := s.Volumes.Get(ctx, assignmentID)
 	if isNotFound(err) {
-		vol, err = volume.Unknown(assignmentID)
-		return vol, true, err
+		return volume.Unknown(assignmentID)
 	}
-	return vol, false, err
+	return vol, err
 }
 
 // HandleReleased applies FulfillmentReleasedToNode.
 func (s *Service) HandleReleased(ctx context.Context, eventID string, in ReleasedInput) error {
 	return s.consume(ctx, ConsumerOrderSourcing, eventID, func(ctx context.Context) ([]shared.Event, error) {
-		vol, _, err := s.volumeRow(ctx, in.AssignmentID)
+		vol, err := s.volumeRow(ctx, in.AssignmentID)
 		if err != nil {
 			return nil, err
 		}
@@ -240,7 +239,7 @@ func (s *Service) HandleReleased(ctx context.Context, eventID string, in Release
 // HandleReassigned applies FulfillmentReassigned: a view update only (ADR 0002 A16).
 func (s *Service) HandleReassigned(ctx context.Context, eventID string, in ReassignedInput) error {
 	return s.consume(ctx, ConsumerOrderSourcing, eventID, func(ctx context.Context) ([]shared.Event, error) {
-		vol, _, err := s.volumeRow(ctx, in.AssignmentID)
+		vol, err := s.volumeRow(ctx, in.AssignmentID)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +251,7 @@ func (s *Service) HandleReassigned(ctx context.Context, eventID string, in Reass
 // HandleCancelled applies FulfillmentCancelled: a view update only (ADR 0002 A16).
 func (s *Service) HandleCancelled(ctx context.Context, eventID string, in AssignmentInput) error {
 	return s.consume(ctx, ConsumerOrderSourcing, eventID, func(ctx context.Context) ([]shared.Event, error) {
-		vol, _, err := s.volumeRow(ctx, in.AssignmentID)
+		vol, err := s.volumeRow(ctx, in.AssignmentID)
 		if err != nil {
 			return nil, err
 		}
@@ -265,7 +264,7 @@ func (s *Service) HandleCancelled(ctx context.Context, eventID string, in Assign
 // origin (BookingMoved), or reports BookingFailed (ADR 0002 A13, A14).
 func (s *Service) HandleLocked(ctx context.Context, eventID string, in LockedInput) error {
 	return s.consume(ctx, ConsumerOrderSourcing, eventID, func(ctx context.Context) ([]shared.Event, error) {
-		vol, _, err := s.volumeRow(ctx, in.AssignmentID)
+		vol, err := s.volumeRow(ctx, in.AssignmentID)
 		if err != nil {
 			return nil, err
 		}
@@ -284,7 +283,7 @@ func (s *Service) HandleLocked(ctx context.Context, eventID string, in LockedInp
 // HandleLabelIssued applies LabelIssued (ADR 0002 A18).
 func (s *Service) HandleLabelIssued(ctx context.Context, eventID string, in LabelIssuedInput) error {
 	return s.consume(ctx, ConsumerShipping, eventID, func(ctx context.Context) ([]shared.Event, error) {
-		vol, _, err := s.volumeRow(ctx, in.AssignmentID)
+		vol, err := s.volumeRow(ctx, in.AssignmentID)
 		if err != nil {
 			return nil, err
 		}
