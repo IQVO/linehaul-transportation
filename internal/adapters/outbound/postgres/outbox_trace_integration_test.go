@@ -33,7 +33,7 @@ func TestOutboxInsertStoresTheActiveTraceparent(t *testing.T) {
 	pool := pgtest.NewPool(t)
 	repo := postgres.NewOutboxRepo(pool)
 
-	ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "POST /loads/{loadId}:close")
+	ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "POST /loads/{loadId}/closures")
 	defer span.End()
 	if err := repo.Insert(ctx, probeMessage("evt-trace-1")); err != nil {
 		t.Fatal(err)

@@ -51,6 +51,14 @@ func (r *DepartureRepository) Get(ctx context.Context, id departure.ID) (*depart
 	return departure.Restore(snap)
 }
 
+// afterCursor reports whether s sorts strictly after the keyset position.
+func afterCursor(s departure.Snapshot, c *repository.DepartureCursor) bool {
+	if !s.CutoffAt.Equal(c.CutoffAt) {
+		return s.CutoffAt.After(c.CutoffAt)
+	}
+	return string(s.ID) > c.ID
+}
+
 func matches(s departure.Snapshot, f repository.DepartureFilter) bool {
 	switch {
 	case f.Origin != "" && s.OriginNodeID != f.Origin,
@@ -60,7 +68,8 @@ func matches(s departure.Snapshot, f repository.DepartureFilter) bool {
 		!f.CutoffFrom.IsZero() && s.CutoffAt.Before(f.CutoffFrom),
 		!f.CutoffTo.IsZero() && !s.CutoffAt.Before(f.CutoffTo),
 		!f.CutoffAfter.IsZero() && !s.CutoffAt.After(f.CutoffAfter),
-		f.HasRoom && s.BookedPackages >= s.CapacityPackages:
+		f.HasRoom && s.BookedPackages >= s.CapacityPackages,
+		f.After != nil && !afterCursor(s, f.After):
 		return false
 	}
 	return true

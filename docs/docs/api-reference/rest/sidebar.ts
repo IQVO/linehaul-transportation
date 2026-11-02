@@ -58,7 +58,7 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/change-departure-capacity",
           label: "Change the package capacity of a scheduled departure (ChangeDepartureCapacity)",
-          className: "api-method post",
+          className: "api-method put",
         },
       ],
     },

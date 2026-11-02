@@ -16,8 +16,11 @@ type ListDeparturesQuery struct {
 	Destination string
 	From        *time.Time
 	To          *time.Time
-	// Limit 0 means repository.DefaultListLimit.
+	// Limit 0 means repository.DefaultListLimit (ListDepartures) or
+	// repository.DefaultPageLimit (ListDeparturesPage).
 	Limit int
+	// After is the keyset position of ListDeparturesPage; nil is the first page.
+	After *repository.DepartureCursor
 }
 
 // ListDepartures lists departures by origin, destination and cutoff window
@@ -41,6 +44,41 @@ func (s *Service) ListDepartures(ctx context.Context, q ListDeparturesQuery) (vi
 		return views.DepartureList{}, err
 	}
 	return views.FromDepartures(list), nil
+}
+
+// ListDeparturesPage is the keyset-paged list behind GET /departures: at most
+// Limit departures (1..repository.MaxPageLimit, default DefaultPageLimit)
+// ordered by (cutoffAt, departureId) after q.After, plus the cursor of the next
+// page, nil on the last one.
+func (s *Service) ListDeparturesPage(ctx context.Context, q ListDeparturesQuery) (views.DepartureList, *repository.DepartureCursor, error) {
+	limit := q.Limit
+	if limit == 0 {
+		limit = repository.DefaultPageLimit
+	}
+	if limit < 1 || limit > repository.MaxPageLimit {
+		return views.DepartureList{}, nil, shared.Invalid("limit must be between 1 and %d", repository.MaxPageLimit)
+	}
+	if q.From != nil && q.To != nil && q.From.After(*q.To) {
+		return views.DepartureList{}, nil, shared.Invalid("from is after to")
+	}
+	f := repository.DepartureFilter{Origin: q.Origin, Destination: q.Destination, After: q.After, Limit: limit + 1}
+	if q.From != nil {
+		f.CutoffFrom = *q.From
+	}
+	if q.To != nil {
+		f.CutoffTo = *q.To
+	}
+	list, err := s.Departures.List(ctx, f)
+	if err != nil {
+		return views.DepartureList{}, nil, err
+	}
+	var next *repository.DepartureCursor
+	if len(list) > limit {
+		list = list[:limit]
+		last := list[limit-1]
+		next = &repository.DepartureCursor{CutoffAt: last.CutoffAt(), ID: string(last.ID())}
+	}
+	return views.FromDepartures(list), next, nil
 }
 
 // GetDeparture returns one departure.

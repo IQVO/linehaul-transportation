@@ -16,7 +16,7 @@ function renderScreen(path = "/departures") {
 
 describe("DepartureListScreen", () => {
   it("loads the horizon and renders one row per departure", async () => {
-    mockApi({ "GET /departures": json({ departures: [departure(), cancelledDeparture()] }) });
+    mockApi({ "GET /departures": json({ items: [departure(), cancelledDeparture()] }) });
     renderScreen();
     expect(await screen.findByRole("link", { name: "dep-7f3a" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "dep-0c2d" })).toBeInTheDocument();
@@ -26,7 +26,7 @@ describe("DepartureListScreen", () => {
   });
 
   it("sends the filters as query parameters only after Apply", async () => {
-    const api = mockApi({ "GET /departures": json({ departures: [] }) });
+    const api = mockApi({ "GET /departures": json({ items: [] }) });
     renderScreen();
     await screen.findByText(/No departure matches/);
     expect(api.calls).toHaveLength(1); // the unfiltered first load
@@ -45,7 +45,7 @@ describe("DepartureListScreen", () => {
   });
 
   it("refuses a malformed filter and fires no request for it", async () => {
-    const api = mockApi({ "GET /departures": json({ departures: [] }) });
+    const api = mockApi({ "GET /departures": json({ items: [] }) });
     renderScreen();
     await screen.findByText(/No departure matches/);
     const before = api.calls.length;
@@ -58,7 +58,7 @@ describe("DepartureListScreen", () => {
   });
 
   it("refuses a window instant the API would reject", async () => {
-    mockApi({ "GET /departures": json({ departures: [] }) });
+    mockApi({ "GET /departures": json({ items: [] }) });
     renderScreen();
     await screen.findByText(/No departure matches/);
     const user = userEvent.setup();

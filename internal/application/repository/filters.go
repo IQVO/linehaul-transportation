@@ -15,6 +15,13 @@ const (
 	MaxListLimit     = 1000
 )
 
+// DefaultPageLimit and MaxPageLimit bound the paged GET /departures (fleet REST
+// guideline section 3.2).
+const (
+	DefaultPageLimit = 100
+	MaxPageLimit     = 500
+)
+
 // DepartureFilter narrows a departure list. A zero field does not filter; the
 // set fields combine with AND. The order is always cutoffAt ascending, then
 // departureId ascending. Limit 0 means DefaultListLimit.
@@ -29,5 +36,15 @@ type DepartureFilter struct {
 	CutoffAfter time.Time
 	// HasRoom keeps only departures with booked < capacity.
 	HasRoom bool
-	Limit   int
+	// After keeps only departures strictly after this keyset position in the
+	// (cutoffAt, departureId) order; nil starts at the first row.
+	After *DepartureCursor
+	Limit int
+}
+
+// DepartureCursor is the keyset position of a departure list: the cutoffAt
+// and the id of the last row of the previous page.
+type DepartureCursor struct {
+	CutoffAt time.Time
+	ID       string
 }

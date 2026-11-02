@@ -54,7 +54,7 @@ neighbours are on [Subdomain classification](/docs/ddd/subdomain-classification)
 
 ## Capabilities
 
-- Define and retire the weekly schedule of a lane (REST `POST /lane-schedules`, `POST /lane-schedules/{laneId}:retire`).
+- Define and retire the weekly schedule of a lane (REST `POST /lane-schedules`, `POST /lane-schedules/{laneId}/retirements`).
 - Generate departures for the next 14 days (horizon roll), including a pickup departure at every cutoff of an ACTIVE vendor node.
 - Cancel a departure or change its capacity; assignments booked on a cancelled departure move to the next pickup or fail.
 - Book capacity from `FulfillmentLocked`, keep the expected volume of each assignment, and add tracking numbers from `LabelIssued`.

@@ -18,8 +18,8 @@ event, the `processed_events` claim. Reads (`ListDepartures`, `GetDeparture`) ar
   `(consumer, event_id)` in `processed_events`, so a redelivered CloudEvent changes nothing.
 - **Optimistic concurrency.** Aggregates carry a `version`; a lost race is `concurrent-update` (409). Departure and ExpectedVolume writes inside a
   transaction share one working set (`bookingSet`) so a departure keeps one version line.
-- **Idempotent commands.** A command whose target is already in the target state returns it unchanged and raises nothing (a CLOSED load on
-  `:close`, a DEPARTED one on `:dispatch`, an ARRIVED one on `:receive`, a CANCELLED departure on `:cancel`, a RETIRED schedule on `:retire`).
+- **Idempotent commands.** A command whose target is already in the target state returns it unchanged and raises nothing 
+  `/closures`, a DEPARTED one on `/dispatches`, an ARRIVED one on `/receipts`, a CANCELLED departure on `/cancellations`, a RETIRED schedule on `/retirements`).
 - **Errors** become RFC 9457 problems; the slugs are in [Troubleshooting](/docs/operations/troubleshooting#rest-problem-types).
 
 ## Commands (REST)
@@ -27,14 +27,14 @@ event, the `processed_events` claim. Reads (`ListDepartures`, `GetDeparture`) ar
 | Use case | Trigger | Inputs | Invariants and rules | Events raised |
 | --- | --- | --- | --- | --- |
 | `DefineLaneSchedule` | `POST /lane-schedules` | `laneId`, 1 to 100 `slots` (`dayOfWeek`, `cutoffLocalTime`, `departsLocalTime`, `arrivesLocalTime`, `capacityPackages` >= 1) | The lane must be known in `lane_views` (else 404). Slots must not overlap on a weekday (`overlapping-slots`); departs not before cutoff (`invalid-departure-times`). Creates an ACTIVE schedule (201) or replaces the slots of an ACTIVE one (200, effective from the next horizon roll, departures already generated stay). A RETIRED schedule cannot be redefined (`illegal-transition`). | none |
-| `RetireLaneSchedule` | `POST /lane-schedules/{laneId}:retire` | `laneId` | ACTIVE to RETIRED; the horizon roll skips it from now on; generated departures stay. | none |
-| `CancelDeparture` | `POST /departures/{departureId}:cancel` | `departureId`, `reason` | Only a SCHEDULED departure can be cancelled (`illegal-transition` otherwise; an already CANCELLED one is returned unchanged). In the same transaction every assignment booked on it is rebooked on the next SCHEDULED PICKUP departure from the same origin with room and a later cutoff, or fails (ADR 0002 A15). | `DepartureCancelled`; per moved booking `BookingMoved` plus `DepartureCapacityChanged` of the new departure; per failed booking `BookingFailed` |
-| `ChangeDepartureCapacity` | `POST /departures/{departureId}:change-capacity` | `departureId`, `capacityPackages` (0..2147483647) | Only SCHEDULED; never below the booked count (`departure-full`); the same value changes nothing. | `DepartureCapacityChanged` |
+| `RetireLaneSchedule` | `POST /lane-schedules/{laneId}/retirements` | `laneId` | ACTIVE to RETIRED; the horizon roll skips it from now on; generated departures stay. | none |
+| `CancelDeparture` | `POST /departures/{departureId}/cancellations` | `departureId`, `reason` | Only a SCHEDULED departure can be cancelled (`illegal-transition` otherwise; an already CANCELLED one is returned unchanged). In the same transaction every assignment booked on it is rebooked on the next SCHEDULED PICKUP departure from the same origin with room and a later cutoff, or fails (ADR 0002 A15). | `DepartureCancelled`; per moved booking `BookingMoved` plus `DepartureCapacityChanged` of the new departure; per failed booking `BookingFailed` |
+| `ChangeDepartureCapacity` | `PUT /departures/{departureId}/capacity` | `departureId`, `capacityPackages` (0..2147483647) | Only SCHEDULED; never below the booked count (`departure-full`); the same value changes nothing. | `DepartureCapacityChanged` |
 | `OpenLoad` | `POST /loads` | `departureId` | The departure must be SCHEDULED; at most one load per departure (`load-already-exists`, unique `loads.departure_id`). Copies kind, nodes, node types and capacity from the departure. | none |
 | `AddPackage` | `POST /loads/{loadId}/packages` | `loadId`, `trackingNumber` (1 to 64 characters) | Load OPEN and its departure SCHEDULED; a tracking number is on at most one OPEN or CLOSED load (`package-already-loaded`, partial unique index); package count at most the departure capacity (`load-over-capacity`); a number already on this load is a no-op. On LINEHAUL and AIR departures the package is also booked on the departure (ADR 0002 A20); on a PICKUP departure the capacity was booked by the assignment. | `DepartureCapacityChanged` (LINEHAUL, AIR) |
-| `CloseLoad` | `POST /loads/{loadId}:close` | `loadId` | OPEN to CLOSED while the departure is SCHEDULED; closes the departure (SCHEDULED to CLOSED). | `LoadClosed` (analytics topic) |
-| `DispatchLoad` | `POST /loads/{loadId}:dispatch` | `loadId` | CLOSED to DEPARTED; records the departure of the trip (departure CLOSED to DEPARTED, `departedAt`). Counted in `linehaul.loads.dispatched` by outcome. | `LoadDeparted`, `DepartureDeparted` (analytics topic) |
-| `ReceiveLoad` | `POST /loads/{loadId}:receive` | `loadId` | DEPARTED to ARRIVED; records the arrival of the trip (departure to ARRIVED, `arrivedAt`). | `LoadArrived`, `DepartureArrived` (analytics topic) |
+| `CloseLoad` | `POST /loads/{loadId}/closures` | `loadId` | OPEN to CLOSED while the departure is SCHEDULED; closes the departure (SCHEDULED to CLOSED). | `LoadClosed` (analytics topic) |
+| `DispatchLoad` | `POST /loads/{loadId}/dispatches` | `loadId` | CLOSED to DEPARTED; records the departure of the trip (departure CLOSED to DEPARTED, `departedAt`). Counted in `linehaul.loads.dispatched` by outcome. | `LoadDeparted`, `DepartureDeparted` (analytics topic) |
+| `ReceiveLoad` | `POST /loads/{loadId}/receipts` | `loadId` | DEPARTED to ARRIVED; records the arrival of the trip (departure to ARRIVED, `arrivedAt`). | `LoadArrived`, `DepartureArrived` (analytics topic) |
 
 ## Queries (REST, MCP, A2A)
 

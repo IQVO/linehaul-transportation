@@ -37,7 +37,7 @@ Each entry follows symptom, cause, check, fix. The checks use `psql` against the
 | Pickup departures missing for a vendor node | The node is not an ACTIVE vendor fulfillment centre with a profile and cutoffs, or has no default outbound lane | `SELECT * FROM node_views WHERE id = '<nodeId>';` | Check the node-topology events (`NodeActivated`, `NodeOperationalProfileDeclared`) |
 | ERROR `<consumer> handling failed; retrying the same message` repeating, then a message on `<topic>.dlq` | The handler error persisted for 5 attempts, or the payload can never be applied | Consumer log with `partition`, `offset`; read the `.dlq` message headers `x-dlq-error`, `x-dlq-source-topic`, `x-dlq-source-offset` | Fix the cause and produce the DLQ message value back to the source topic: replay is idempotent through `processed_events` |
 | WARN `skipping a message that is not a valid CloudEvent` / `skipping an event that can never be applied` | The producer sent a non-CloudEvents 1.0 message or a payload the domain refuses | Log line (`type`, `event_id`) | Fix the producer; nothing to do here, the offset is committed |
-| A booking moved to another pickup (`BookingMoved`) or failed (`BookingFailed`) | The locked pickup departure is unknown, closed, cancelled or full | Events on `retailnetwork.linehaul-transportation.events` | By design (ADR 0002 A14); add capacity with `POST /departures/{departureId}:change-capacity` |
+| A booking moved to another pickup (`BookingMoved`) or failed (`BookingFailed`) | The locked pickup departure is unknown, closed, cancelled or full | Events on `retailnetwork.linehaul-transportation.events` | By design (ADR 0002 A14); add capacity with `PUT /departures/{departureId}/capacity` |
 | Consumer topic has zero lag and no data | The producer has not written yet; topics are auto-created by the first writer | Kafka topic list | Normal early state |
 
 ## REST problem types
@@ -48,9 +48,9 @@ All errors are RFC 9457 `application/problem+json` with `type = https://retailne
 | --- | --- | --- | --- |
 | 400 | `malformed-request` | Body is not valid JSON, has unknown fields or could not be read | Send the documented body |
 | 400 | `idempotency-key-required` | A POST without the `Idempotency-Key` header | Send a unique key per logical request |
-| 400 | `idempotency-key-invalid` | Key empty or longer than 200 characters | Use a shorter key |
+| 400 | `idempotency-key-invalid` | Key not 1 to 128 printable ASCII characters | Send a UUID |
 | 404 | `not-found` | Unknown departure, load, lane or schedule | Check the id; for a lane, see above |
-| 409 | `illegal-transition` | The state does not allow the command (for example `:dispatch` on an OPEN load, which must be CLOSED first) | Read the resource state; follow open, close, dispatch, receive |
+| 409 | `illegal-transition` | The state does not allow the command (for example `POST /loads/{loadId}/dispatches` on an OPEN load, which must be CLOSED first) | Read the resource state; follow open, close, dispatch, receive |
 | 409 | `concurrent-update` | Another request modified the aggregate (version guard) | Re-fetch and retry |
 | 409 | `departure-full` | The departure has no remaining capacity | `change-capacity` or use another departure |
 | 409 | `departure-closed` | A booking after `cutoffAt`, or the departure is no longer SCHEDULED | Pick a later departure |
@@ -59,10 +59,11 @@ All errors are RFC 9457 `application/problem+json` with `type = https://retailne
 | 409 | `load-over-capacity` | Adding the package exceeds the departure capacity | Raise capacity or open another load |
 | 409 | `load-already-exists` | The departure already has a load | Use that load |
 | 413 | `request-body-too-large` | Body above the limit | Send less data (a schedule has at most 100 slots) |
-| 422 | `validation-failed` | A field is invalid (bad time, unknown mode, limit outside 1..1000) | Fix the field named in `detail` |
+| 422 | `validation-failed` | A field is invalid (bad time, unknown mode) | Fix the field named in `detail` |
 | 422 | `invalid-departure-times` | `departsLocalTime` is before `cutoffLocalTime` | Depart at or after the cutoff |
 | 422 | `overlapping-slots` | Two slots overlap on the same weekday | Remove the overlap |
-| 422 | `idempotency-key-reused` | Same key, different method, path or body | Use a new key for a different request |
+| 409 | `idempotency-key-reused` | Same key, different method, path or body | Use a new key for a different request |
+| 400 | `invalid-limit`, `invalid-cursor`, `unknown-query-parameter` | `GET /departures` with a `limit` outside 1..500, a cursor that was not issued by the service, or a retired paging parameter (`after`, `offset`, `nextToken`) | Follow `nextCursor` as returned; send only the declared parameters |
 | 500 | `internal-error` | Unexpected failure; 5xx are never stored for replay | Log line with `request_id` and `trace_id`; retry with the same key |
 
 An equal request with the same key replays the first stored answer (2xx and 4xx) and adds `Idempotency-Replayed: true`; keys live 24 h.

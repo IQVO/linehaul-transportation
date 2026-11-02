@@ -2,13 +2,10 @@ package http
 
 import (
 	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/claudioed/linehaul-transportation/internal/application/usecases"
-	"github.com/claudioed/linehaul-transportation/internal/domain/shared"
 )
 
 type slotBody struct {
@@ -67,39 +64,6 @@ func (s *Server) handleDefineLaneSchedule(w http.ResponseWriter, r *http.Request
 func (s *Server) handleRetireLaneSchedule(w http.ResponseWriter, r *http.Request) {
 	v, err := s.Service.RetireLaneSchedule(r.Context(), chi.URLParam(r, "laneId"))
 	respond(w, r, http.StatusOK, v, err)
-}
-
-func (s *Server) handleListDepartures(w http.ResponseWriter, r *http.Request) {
-	q, err := listQuery(r)
-	if err != nil {
-		writeError(w, r, err)
-		return
-	}
-	v, err := s.Service.ListDepartures(r.Context(), q)
-	respond(w, r, http.StatusOK, v, err)
-}
-
-func listQuery(r *http.Request) (usecases.ListDeparturesQuery, error) {
-	values := r.URL.Query()
-	q := usecases.ListDeparturesQuery{Origin: values.Get("origin"), Destination: values.Get("destination")}
-	for name, dest := range map[string]**time.Time{"from": &q.From, "to": &q.To} {
-		if !values.Has(name) {
-			continue
-		}
-		t, err := time.Parse(time.RFC3339, values.Get(name))
-		if err != nil {
-			return q, shared.Invalid("%s must be an RFC 3339 instant", name)
-		}
-		*dest = &t
-	}
-	if values.Has("limit") {
-		n, err := strconv.Atoi(values.Get("limit"))
-		if err != nil || n < 1 {
-			return q, shared.Invalid("limit must be a positive integer")
-		}
-		q.Limit = n
-	}
-	return q, nil
 }
 
 func (s *Server) handleGetDeparture(w http.ResponseWriter, r *http.Request) {

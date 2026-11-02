@@ -35,7 +35,14 @@ var internalProblem = problem{http.StatusInternalServerError, "internal-error", 
 var (
 	idempotencyKeyRequired = problem{http.StatusBadRequest, "idempotency-key-required", "Idempotency-Key header is required"}
 	idempotencyKeyInvalid  = problem{http.StatusBadRequest, "idempotency-key-invalid", "Idempotency-Key is invalid"}
-	idempotencyKeyReused   = problem{http.StatusUnprocessableEntity, "idempotency-key-reused", "Idempotency-Key was already used with a different request"}
+	idempotencyKeyReused   = problem{http.StatusConflict, "idempotency-key-reused", "Idempotency-Key was already used with a different request"}
+)
+
+// Problems of the paged collection GET (fleet REST guideline sections 3 and 4).
+var (
+	invalidLimit          = problem{http.StatusBadRequest, "invalid-limit", "Invalid limit"}
+	invalidCursor         = problem{http.StatusBadRequest, "invalid-cursor", "Invalid cursor"}
+	unknownQueryParameter = problem{http.StatusBadRequest, "unknown-query-parameter", "Unknown query parameter"}
 )
 
 // problemCatalogue maps every typed error to its problem, in match order (the
@@ -61,9 +68,22 @@ var problemCatalogue = []struct {
 	{ports.ErrConcurrentUpdate, problem{http.StatusConflict, "concurrent-update", "The resource was modified by another request; re-fetch it and retry"}},
 }
 
+// problemError is an error that already carries its problem (the adapter's own
+// 400s for the paged collection).
+type problemError struct {
+	p      problem
+	detail string
+}
+
+func (e problemError) Error() string { return e.detail }
+
 // problemFor returns the problem of the first catalogue entry err matches,
 // or the internal-error problem.
 func problemFor(err error) problem {
+	var pe problemError
+	if errors.As(err, &pe) {
+		return pe.p
+	}
 	for _, entry := range problemCatalogue {
 		if errors.Is(err, entry.err) {
 			return entry.p
