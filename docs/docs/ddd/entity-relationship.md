@@ -147,7 +147,7 @@ Source: `0001_linehaul_schema.up.sql` (`outbox_events`, `processed_events`, `ide
 - `outbox_events` is written in the same transaction as the aggregate and drained by the relay; the partial index `idx_outbox_events_unpublished (id) WHERE published_at IS NULL` keeps the scan small;
   `(event_id, topic)` is unique so a retry republishes the same id.
 - `processed_events` is the inbox: `(consumer, event_id)` is claimed with `INSERT ... ON CONFLICT DO NOTHING` in the same transaction as the effect, so a rollback un-claims it.
-- `idempotency_keys` stores the first response of each `(route, key)`; rows older than 24 hours are deleted by every keyed write.
+- `idempotency_keys` stores the first response of each key (the key is global; `route` is kept for diagnostics, migration `0002`); rows older than 24 hours are deleted by every keyed write.
 
 ## Table to aggregate
 

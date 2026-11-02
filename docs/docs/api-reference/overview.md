@@ -27,16 +27,16 @@ See the [Quickstart](/docs/overview/quickstart) for real responses.
 | Tag | Endpoint | Operation id | Success | Notes |
 | --- | --- | --- | --- | --- |
 | Lane schedules | `POST /lane-schedules` | `defineLaneSchedule` | `201` created, `200` slots replaced | Body `laneId`, `slots[1..100]`; lane must be known |
-| Lane schedules | `POST /lane-schedules/{laneId}:retire` | `retireLaneSchedule` | `200` | Idempotent on a RETIRED schedule |
-| Departures | `GET /departures` | `listDepartures` | `200 {departures}` | Filters `origin`, `destination`, `from`, `to`, `limit` (1..1000, default 500); ordered by `cutoffAt` |
+| Lane schedules | `POST /lane-schedules/{laneId}/retirements` | `retireLaneSchedule` | `200` | Idempotent on a RETIRED schedule |
+| Departures | `GET /departures` | `listDepartures` | `200 {items,nextCursor}` | Filters `origin`, `destination`, `from`, `to`; `limit` (1..500, default 100) and `cursor`; ordered by `cutoffAt`, then `departureId` |
 | Departures | `GET /departures/{departureId}` | `getDeparture` | `200` | `404 not-found` |
-| Departures | `POST /departures/{departureId}:cancel` | `cancelDeparture` | `200` | Body `reason`; rebooks the assignments booked on it |
-| Departures | `POST /departures/{departureId}:change-capacity` | `changeDepartureCapacity` | `200` | Body `capacityPackages`; not below the booked count |
+| Departures | `POST /departures/{departureId}/cancellations` | `cancelDeparture` | `200` | Body `reason`; rebooks the assignments booked on it |
+| Departures | `PUT /departures/{departureId}/capacity` | `changeDepartureCapacity` | `200` | Idempotent by method, no key; body `capacityPackages`; not below the booked count |
 | Loads | `POST /loads` | `openLoad` | `201` | Body `departureId`; one load per departure |
 | Loads | `POST /loads/{loadId}/packages` | `addPackageToLoad` | `200` | Body `trackingNumber` (max 64 characters) |
-| Loads | `POST /loads/{loadId}:close` | `closeLoad` | `200` | OPEN to CLOSED |
-| Loads | `POST /loads/{loadId}:dispatch` | `dispatchLoad` | `200` | CLOSED to DEPARTED |
-| Loads | `POST /loads/{loadId}:receive` | `receiveLoad` | `200` | DEPARTED to ARRIVED |
+| Loads | `POST /loads/{loadId}/closures` | `closeLoad` | `200` | OPEN to CLOSED |
+| Loads | `POST /loads/{loadId}/dispatches` | `dispatchLoad` | `200` | CLOSED to DEPARTED |
+| Loads | `POST /loads/{loadId}/receipts` | `receiveLoad` | `200` | DEPARTED to ARRIVED |
 | Health | `GET /healthz`, `GET /readyz` | none (not in the spec) | `200` | `/readyz` is 503 while draining or when Postgres or Kafka is down; `cmd/mcp` and `cmd/a2a` serve `/healthz` only |
 
 ## Conventions in the contract
@@ -46,13 +46,13 @@ See the [Quickstart](/docs/overview/quickstart) for real responses.
   `departure-closed`, `package-already-loaded`, `load-over-capacity`, `load-already-exists`, `illegal-transition`, `concurrent-update`,
   `idempotency-key-required`, `idempotency-key-invalid`, `idempotency-key-reused` and `internal-error`. Statuses and remedies are on
   [Troubleshooting](/docs/operations/troubleshooting#rest-problem-types).
-- **`Idempotency-Key`.** Required on every state-changing POST (`400 idempotency-key-required` when absent, `idempotency-key-invalid` when empty or longer than 200 characters). The
+- **`Idempotency-Key`.** Required on every POST (`400 idempotency-key-required` when absent, `idempotency-key-invalid` unless 1 to 128 printable ASCII characters); the key is global, not per route. `PUT` is idempotent by method and takes none. The
   same key with the same method, path and body replays the first stored response (2xx and 4xx) with `Idempotency-Replayed: true` for 24 hours; the same key with a different request is
-  `422 idempotency-key-reused`. 5xx answers are not stored.
+  `409 idempotency-key-reused`. 5xx answers are not stored.
 - **Optimistic concurrency.** Aggregates carry a version; a write that loses a race is `409 concurrent-update`.
 - **Time.** Every instant is RFC 3339 in UTC. Lane-schedule slots are wall-clock `HH:MM` times: cutoff and departure in the time zone of the lane's origin node, arrival in
   the zone of its destination node.
-- **Paging.** `GET /departures` returns up to `limit` rows ordered by `cutoffAt`, then `departureId`; there is no cursor: narrow the window with `from` and `to`.
+- **Paging.** `GET /departures` is keyset-paged by `(cutoffAt, departureId)`: `limit` (1..500, default 100) and the opaque `cursor`, answered as `{items,nextCursor}` (`nextCursor` is absent on the last page; repeat the filters on every page). An invalid `limit` is `400 invalid-limit`, an undecodable cursor `400 invalid-cursor`, any other query parameter `400 unknown-query-parameter`. MCP and A2A keep their own `limit` (1..1000, default 500).
 - **Commands are idempotent by state.** Repeating a command that already holds (close of a CLOSED load, cancel of a CANCELLED departure) returns the resource unchanged.
 - **Auth**: none. The fleet reverted REST, MCP and A2A auth, and `TestNoAuthMiddlewareReintroduced` fails CI if auth middleware returns under `internal/adapters/inbound`.
 - **Events** are CloudEvents 1.0, structured mode; the contract is dispatched on the full `type`, deduplicated on `id`, and unknown types are ignored by consumers.

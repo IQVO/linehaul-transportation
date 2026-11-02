@@ -54,7 +54,7 @@ neighbours are on [Subdomain classification](/docs/ddd/subdomain-classification)
 
 ## Capabilities
 
-- Define and retire the weekly schedule of a lane (REST `POST /lane-schedules`, `POST /lane-schedules/{laneId}:retire`).
+- Define and retire the weekly schedule of a lane (REST `POST /lane-schedules`, `POST /lane-schedules/{laneId}/retirements`).
 - Generate departures for the next 14 days (horizon roll), including a pickup departure at every cutoff of an ACTIVE vendor node.
 - Cancel a departure or change its capacity; assignments booked on a cancelled departure move to the next pickup or fail.
 - Book capacity from `FulfillmentLocked`, keep the expected volume of each assignment, and add tracking numbers from `LabelIssued`.
@@ -83,3 +83,7 @@ neighbours are on [Subdomain classification](/docs/ddd/subdomain-classification)
 
 The network-level view of this context (its neighbours and the model it is built from) lives on the
 [retail-network pages of warehouse-docs](https://iqvo.github.io/warehouse-docs/network).
+
+:::note[Disclaimer]
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+:::

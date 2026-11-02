@@ -51,5 +51,5 @@ Loads are plain consolidation and plotted lowest.
 | Plumbing (outbox, inbox, CloudEvents) | Commodity | The same building blocks as every context |
 
 **Movement to watch.** If the network began to compete on the middle mile itself (dynamic capacity bought per day, load-level re-routing to save a promise), the capacity slice would move
-right and up, towards Core. Today a planner can change a departure's capacity (`POST /departures/{departureId}:change-capacity`) and a cancelled departure rebooks its assignments onto the
+right and up, towards Core. Today a planner can change a departure's capacity (`PUT /departures/{departureId}/capacity`) and a cancelled departure rebooks its assignments onto the
 next pickup, but nothing optimises routes or buys capacity.

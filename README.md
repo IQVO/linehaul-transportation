@@ -174,15 +174,15 @@ picked up by the consumers. The chart's `otel.*` values render the env.
 
 Contract: [`apis/openapi.yaml`](apis/openapi.yaml). No authentication. Errors are RFC 9457 `application/problem+json` (`type` is a slug such as
 `not-found`, `illegal-transition`, `concurrent-update`, `validation-failed`, `departure-full`, `package-already-loaded`).
-Every state-changing request needs an `Idempotency-Key` header: a repeat with the same request replays the first response for 24 hours.
+Every `POST` needs an `Idempotency-Key` header (1 to 128 printable ASCII characters, one per logical submit; `PUT` is idempotent by method and unkeyed): a repeat of the same request replays the first response for 24 hours with `Idempotency-Replayed: true`, and the same key on a different request is `409 idempotency-key-reused`. `GET /departures` is keyset-paged: `limit` (1-500, default 100) and the opaque `cursor`, answered as `{"items":[...],"nextCursor":"..."}`; any other query parameter is `400 unknown-query-parameter` (ADR 0012).
 
 | Method and path | Operation |
 | --- | --- |
-| `POST /lane-schedules`, `POST /lane-schedules/{laneId}:retire` | define (create or replace), retire |
-| `GET /departures?origin=&destination=&from=&to=`, `GET /departures/{departureId}` | list, read |
-| `POST /departures/{departureId}:cancel`, `POST /departures/{departureId}:change-capacity` | planner commands |
+| `POST /lane-schedules`, `POST /lane-schedules/{laneId}/retirements` | define (create or replace), retire |
+| `GET /departures?origin=&destination=&from=&to=&limit=&cursor=`, `GET /departures/{departureId}` | list, read |
+| `POST /departures/{departureId}/cancellations`, `PUT /departures/{departureId}/capacity` | planner commands |
 | `POST /loads`, `POST /loads/{loadId}/packages` | open a load, add a package |
-| `POST /loads/{loadId}:close`, `:dispatch`, `:receive` | load lifecycle |
+| `POST /loads/{loadId}/closures`, `POST /loads/{loadId}/dispatches`, `POST /loads/{loadId}/receipts` | load lifecycle |
 | `GET /healthz`, `GET /readyz` | liveness, readiness (served by the binary; the spec covers the eleven resource paths above) |
 
 ## Helm chart

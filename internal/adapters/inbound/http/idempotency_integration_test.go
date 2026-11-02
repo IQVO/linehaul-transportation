@@ -130,30 +130,30 @@ func TestTheSameKeyAndBodyReplaysTheFirstResponse(t *testing.T) {
 	}
 }
 
-func TestTheSameKeyWithAnotherBodyIs422KeyReused(t *testing.T) {
+func TestTheSameKeyWithAnotherBodyIs409KeyReused(t *testing.T) {
 	d := newDBAPI(t)
 	d.seed("dep-1")
 	d.seed("dep-2")
 	d.do("POST", "/loads", loadBody("dep-1"), "key-1")
 	r := d.do("POST", "/loads", loadBody("dep-2"), "key-1")
-	if r.status != nethttp.StatusUnprocessableEntity || r.slug() != "idempotency-key-reused" {
-		t.Fatalf("conflicting body = %d %s, want 422 idempotency-key-reused", r.status, r.raw)
+	if r.status != nethttp.StatusConflict || r.slug() != "idempotency-key-reused" {
+		t.Fatalf("conflicting body = %d %s, want 409 idempotency-key-reused", r.status, r.raw)
 	}
 	if n := d.count(`SELECT count(*) FROM loads`); n != 1 {
 		t.Fatalf("the conflicting request opened a load: %d loads", n)
 	}
 }
 
-func TestTheSameKeyOnAnotherResourceIsAnotherRequest(t *testing.T) {
+func TestTheSameKeyOnAnotherResourceIsKeyReusedGlobally(t *testing.T) {
 	d := newDBAPI(t)
 	d.seed("dep-1")
 	d.seed("dep-2")
-	if first := d.do("POST", "/departures/dep-1:cancel", `{"reason":"weather"}`, "same-key"); first.status != nethttp.StatusOK {
+	if first := d.do("POST", "/departures/dep-1/cancellations", `{"reason":"weather"}`, "same-key"); first.status != nethttp.StatusOK {
 		t.Fatalf("cancel = %d %s", first.status, first.raw)
 	}
-	other := d.do("POST", "/departures/dep-2:cancel", `{"reason":"weather"}`, "same-key")
-	if other.status != nethttp.StatusUnprocessableEntity || other.slug() != "idempotency-key-reused" {
-		t.Fatalf("same key, other departure = %d %s, want 422 idempotency-key-reused", other.status, other.raw)
+	other := d.do("POST", "/departures/dep-2/cancellations", `{"reason":"weather"}`, "same-key")
+	if other.status != nethttp.StatusConflict || other.slug() != "idempotency-key-reused" {
+		t.Fatalf("same key, other departure = %d %s, want 409 idempotency-key-reused", other.status, other.raw)
 	}
 	if n := d.count(`SELECT count(*) FROM departures WHERE state = 'CANCELLED'`); n != 1 {
 		t.Fatalf("%d departures cancelled, want only the first", n)
@@ -163,7 +163,7 @@ func TestTheSameKeyOnAnotherResourceIsAnotherRequest(t *testing.T) {
 func TestAFourXXIsStoredAndItsWritesAreRolledBack(t *testing.T) {
 	d := newDBAPI(t)
 	d.seed("dep-1")
-	d.do("POST", "/departures/dep-1:cancel", `{"reason":"weather"}`, "cancel-1")
+	d.do("POST", "/departures/dep-1/cancellations", `{"reason":"weather"}`, "cancel-1")
 	// A load on a CANCELLED departure is refused (409); the refusal is stored.
 	first := d.do("POST", "/loads", loadBody("dep-1"), "key-409")
 	second := d.do("POST", "/loads", loadBody("dep-1"), "key-409")
@@ -185,14 +185,14 @@ func TestAMissingOrInvalidKeyIs400(t *testing.T) {
 	if r := d.do("POST", "/loads", loadBody("dep-1"), ""); r.status != 400 || r.slug() != "idempotency-key-required" {
 		t.Fatalf("no key = %d %s", r.status, r.raw)
 	}
-	if r := d.do("POST", "/loads", loadBody("dep-1"), strings.Repeat("k", 201)); r.status != 400 || r.slug() != "idempotency-key-invalid" {
-		t.Fatalf("201-char key = %d %s", r.status, r.raw)
+	if r := d.do("POST", "/loads", loadBody("dep-1"), strings.Repeat("k", 129)); r.status != 400 || r.slug() != "idempotency-key-invalid" {
+		t.Fatalf("129-char key = %d %s", r.status, r.raw)
 	}
 	if n := d.count(`SELECT count(*) FROM idempotency_keys`); n != 0 {
 		t.Fatalf("refused keys were recorded: %d rows", n)
 	}
-	if r := d.do("POST", "/loads", loadBody("dep-1"), strings.Repeat("k", 200)); r.status != 201 {
-		t.Fatalf("200-char key = %d %s, want it accepted", r.status, r.raw)
+	if r := d.do("POST", "/loads", loadBody("dep-1"), strings.Repeat("k", 128)); r.status != 201 {
+		t.Fatalf("128-char key = %d %s, want it accepted", r.status, r.raw)
 	}
 }
 
@@ -222,5 +222,101 @@ func TestKeysExpireAfter24HoursAndAreSweptOnTheNextKeyedWrite(t *testing.T) {
 	}
 	if n := d.count(`SELECT count(*) FROM idempotency_keys WHERE created_at < now() - interval '24 hours'`); n != 0 {
 		t.Fatalf("%d expired keys survived the sweep", n)
+	}
+}
+
+func TestConcurrentRequestsWithTheSameKeyHaveOneEffect(t *testing.T) {
+	d := newDBAPI(t)
+	d.seed("dep-1")
+	const n = 8
+	statuses := make(chan int, n)
+	for i := 0; i < n; i++ {
+		go func() {
+			req, _ := nethttp.NewRequest("POST", d.srv.URL+"/loads", strings.NewReader(loadBody("dep-1")))
+			req.Header.Set("Idempotency-Key", "race-1")
+			resp, err := nethttp.DefaultClient.Do(req)
+			if err != nil {
+				statuses <- 0
+				return
+			}
+			_ = resp.Body.Close()
+			statuses <- resp.StatusCode
+		}()
+	}
+	for i := 0; i < n; i++ {
+		if st := <-statuses; st != nethttp.StatusCreated {
+			t.Fatalf("concurrent same-key request answered %d, want the first answer (201) replayed", st)
+		}
+	}
+	if loads, keys := d.count(`SELECT count(*) FROM loads`), d.count(`SELECT count(*) FROM idempotency_keys`); loads != 1 || keys != 1 {
+		t.Fatalf("rows: loads %d keys %d, want 1 each", loads, keys)
+	}
+}
+
+func TestAPutIsNotKeyedAndIgnoresAKey(t *testing.T) {
+	d := newDBAPI(t)
+	d.seed("dep-1")
+	for i := 0; i < 2; i++ {
+		if r := d.do("PUT", "/departures/dep-1/capacity", `{"capacityPackages":9}`, ""); r.status != nethttp.StatusOK || r.header.Get(inbound.IdempotencyReplayedHeader) != "" {
+			t.Fatalf("PUT without a key = %d %s", r.status, r.raw)
+		}
+	}
+	if r := d.do("PUT", "/departures/dep-1/capacity", `{"capacityPackages":9}`, "ignored"); r.status != nethttp.StatusOK {
+		t.Fatalf("PUT with a key = %d %s", r.status, r.raw)
+	}
+	if n := d.count(`SELECT count(*) FROM idempotency_keys`); n != 0 {
+		t.Fatalf("a PUT stored %d key rows", n)
+	}
+}
+
+func TestListDeparturesPagesOverPostgresWithTiesOnTheCutoff(t *testing.T) {
+	d := newDBAPI(t)
+	cutoff := time.Now().UTC().Add(time.Hour)
+	for i := 0; i < 7; i++ {
+		id := "dep-" + string(rune('a'+i))
+		at := cutoff.Add(time.Duration(i/3) * time.Minute) // 3 + 3 + 1 rows share a cutoff
+		dep, _, err := departure.Schedule(departure.Spec{
+			ID: departure.ID(id), LaneID: "lane-1", Kind: departure.KindLinehaul, OriginNodeID: "n-a", DestinationNodeID: "n-b",
+			OriginType: network.SortationCenter, DestinationType: network.SortationCenter,
+			CutoffAt: at, DepartsAt: at, ArrivesAt: at.Add(time.Hour), CapacityPackages: 5,
+		}, true, time.Now().UTC())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := postgres.NewDepartureRepo(d.pool).Save(context.Background(), dep); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := map[string]bool{}
+	var order []string
+	path := "/departures?limit=3"
+	for pages := 0; path != ""; pages++ {
+		if pages > 4 {
+			t.Fatal("paging does not terminate")
+		}
+		r := d.do("GET", path, "", "")
+		var body struct {
+			Items []struct {
+				DepartureID string `json:"departureId"`
+			} `json:"items"`
+			NextCursor string `json:"nextCursor"`
+		}
+		if err := json.Unmarshal([]byte(r.raw), &body); err != nil || r.status != 200 {
+			t.Fatalf("page = %d %s", r.status, r.raw)
+		}
+		for _, it := range body.Items {
+			if seen[it.DepartureID] {
+				t.Fatalf("%s returned twice", it.DepartureID)
+			}
+			seen[it.DepartureID] = true
+			order = append(order, it.DepartureID)
+		}
+		path = ""
+		if body.NextCursor != "" {
+			path = "/departures?limit=3&cursor=" + body.NextCursor
+		}
+	}
+	if strings.Join(order, " ") != "dep-a dep-b dep-c dep-d dep-e dep-f dep-g" {
+		t.Fatalf("walked %v", order)
 	}
 }

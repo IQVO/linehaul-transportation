@@ -20,8 +20,8 @@ const INITIAL: Filters = { origin: "", destination: "", from: "", to: "", limit:
 /**
  * The departure horizon: GET /departures, ordered by cutoffAt then id,
  * optionally narrowed to one origin, one destination and a cutoff window
- * [from, to) (RFC 3339 instants, from inclusive, to exclusive). The API has
- * no cursor: `limit` (1..1000, default 500) bounds the page.
+ * [from, to) (RFC 3339 instants, from inclusive, to exclusive). The
+ * `limit` bounds the total, following nextCursor page by page (the service caps a page at 500).
  */
 export function DepartureListScreen() {
   const [draft, setDraft] = useState<Filters>(INITIAL);
