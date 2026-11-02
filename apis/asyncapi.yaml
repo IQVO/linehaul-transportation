@@ -70,7 +70,7 @@ channels:
   nodeTopologyEvents:
     address: retailnetwork.node-topology.events
     title: node-topology integration topic (consumed)
-    description: 'node-topology''s integration topic. This service keeps the fields it relies on in NodeProfileView and LaneView and ignores unknown fields (Conformist). Consumer group: env `NODE_TOPOLOGY_CONSUMER_GROUP` (mandatory).'
+    description: 'node-topology''s integration topic. This service keeps the fields it relies on in NodeProfileView and LaneView and ignores unknown fields (Conformist). Consumer group: env `NODE_TOPOLOGY_CONSUMER_GROUP` (mandatory). A message that is not a valid CloudEvent, or whose type this consumer does not handle, is logged and skipped (offset committed). An event whose `data` can never be applied (undecodable or refused by validation) is dead-lettered at once, and a transient handler failure is dead-lettered once its bounded retries are exhausted, both to `retailnetwork.node-topology.events.dlq` with `x-dlq-*` headers instead of blocking the partition.'
     messages:
       NodeRegistered:
         $ref: '#/components/messages/NodeRegistered'
@@ -89,7 +89,7 @@ channels:
   orderSourcingEvents:
     address: retailnetwork.order-sourcing.events
     title: order-sourcing integration topic (consumed)
-    description: 'order-sourcing''s integration topic (Customer/Supplier). This service keeps the fields it relies on and ignores unknown fields. Consumer group: env `ORDER_SOURCING_CONSUMER_GROUP` (mandatory).'
+    description: 'order-sourcing''s integration topic (Customer/Supplier). This service keeps the fields it relies on and ignores unknown fields. Consumer group: env `ORDER_SOURCING_CONSUMER_GROUP` (mandatory). A message that is not a valid CloudEvent, or whose type this consumer does not handle, is logged and skipped (offset committed). An event whose `data` can never be applied (undecodable or refused by validation) is dead-lettered at once, and a transient handler failure is dead-lettered once its bounded retries are exhausted, both to `retailnetwork.order-sourcing.events.dlq` with `x-dlq-*` headers instead of blocking the partition.'
     messages:
       FulfillmentReleasedToNode:
         $ref: '#/components/messages/FulfillmentReleasedToNode'
@@ -102,7 +102,7 @@ channels:
   shippingAndTrackingEvents:
     address: retailnetwork.shipping-and-tracking.events
     title: shipping-and-tracking integration topic (consumed)
-    description: 'shipping-and-tracking''s integration topic (Conformist). This service keeps the fields it relies on and ignores unknown fields. Consumer group: env `SHIPPING_AND_TRACKING_CONSUMER_GROUP` (mandatory).'
+    description: 'shipping-and-tracking''s integration topic (Conformist). This service keeps the fields it relies on and ignores unknown fields. Consumer group: env `SHIPPING_AND_TRACKING_CONSUMER_GROUP` (mandatory). A message that is not a valid CloudEvent, or whose type this consumer does not handle, is logged and skipped (offset committed). An event whose `data` can never be applied (undecodable or refused by validation) is dead-lettered at once, and a transient handler failure is dead-lettered once its bounded retries are exhausted, both to `retailnetwork.shipping-and-tracking.events.dlq` with `x-dlq-*` headers instead of blocking the partition.'
     messages:
       LabelIssued:
         $ref: '#/components/messages/LabelIssued'
@@ -1259,9 +1259,6 @@ components:
             properties:
               nodeId:
                 type: string
-              activatedAt:
-                type: string
-                format: date-time
             required:
             - nodeId
     NodeSuspendedReceived:
@@ -1274,11 +1271,6 @@ components:
             properties:
               nodeId:
                 type: string
-              reason:
-                type: string
-              suspendedAt:
-                type: string
-                format: date-time
             required:
             - nodeId
     NodeRetiredReceived:
@@ -1291,9 +1283,6 @@ components:
             properties:
               nodeId:
                 type: string
-              retiredAt:
-                type: string
-                format: date-time
             required:
             - nodeId
     LaneOpenedReceived:
@@ -1334,9 +1323,6 @@ components:
             properties:
               laneId:
                 type: string
-              closedAt:
-                type: string
-                format: date-time
             required:
             - laneId
     FulfillmentReleasedToNodeReceived:
@@ -1378,8 +1364,6 @@ components:
             properties:
               assignmentId:
                 type: string
-              fromNodeId:
-                type: string
               toNodeId:
                 type: string
             required:
@@ -1404,9 +1388,6 @@ components:
                 type: string
               pickupDepartureId:
                 type: string
-              lockedAt:
-                type: string
-                format: date-time
             required:
             - assignmentId
             - orderId
@@ -1423,13 +1404,6 @@ components:
             properties:
               assignmentId:
                 type: string
-              orderId:
-                type: string
-              groupNo:
-                type: integer
-                minimum: 1
-              reason:
-                type: string
             required:
             - assignmentId
     LabelIssuedReceived:
@@ -1440,15 +1414,10 @@ components:
           data:
             type: object
             properties:
-              labelRef:
-                type: string
               trackingNumber:
                 type: string
               assignmentId:
                 type: string
-              packageNo:
-                type: integer
-                minimum: 1
             required:
             - trackingNumber
             - assignmentId
@@ -1460,11 +1429,7 @@ components:
           data:
             type: object
             properties:
-              labelRef:
-                type: string
               trackingNumber:
-                type: string
-              reason:
                 type: string
             required:
             - trackingNumber
