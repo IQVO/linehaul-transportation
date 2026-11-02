@@ -30,7 +30,7 @@ handlers in `handlers.go`, wired in `cmd/api/main.go`):
   an opaque 500 `internal-error`. A new `Err` needs a catalogue row, an OpenAPI mention and a case in `handlers_test.go`.
 - **Idempotency-Key** is required on all nine state-changing routes (`idempotency.go`): a global key, fingerprint
   `sha256(method, path, body)`; same key + same request replays the first response (header `Idempotency-Replayed: true`), same key + other
-  request is 409 `idempotency-key-reused`, missing key 400 `idempotency-key-required`, a key over 200 characters 400 `idempotency-key-invalid`,
+  request is 409 `idempotency-key-reused`, missing key 400 `idempotency-key-required`, a key not 1-128 printable ASCII 400 `idempotency-key-invalid`,
   keys live 24 h in `idempotency_keys`. A new state-changing route registers through `Server.keyed`, never `r.Post`.
 - **NUL** (U+0000) is rejected before anything else (`nul.go`): 404 `resource-not-found` in the path, 400 `malformed-request` elsewhere. A body
   above 64 KiB is 413 `request-body-too-large`.
