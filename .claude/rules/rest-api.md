@@ -11,14 +11,14 @@ Route -> use case, kept in sync with `apis/openapi.yaml` (routes are registered 
 handlers in `handlers.go`, wired in `cmd/api/main.go`):
 
 - `POST /lane-schedules` -> `DefineLaneSchedule` (201 created, 200 replaced)
-- `POST /lane-schedules/{laneId}:retire` -> `RetireLaneSchedule`
+- `POST /lane-schedules/{laneId}/retirements` -> `RetireLaneSchedule`
 - `GET /departures?origin=&destination=&from=&to=&limit=` -> `ListDepartures` (`{"departures":[...]}`)
 - `GET /departures/{departureId}` -> `GetDeparture`
-- `POST /departures/{departureId}:cancel` -> `CancelDeparture` (body `{"reason"}`)
-- `POST /departures/{departureId}:change-capacity` -> `ChangeDepartureCapacity` (body `{"capacityPackages"}`)
+- `POST /departures/{departureId}/cancellations` -> `CancelDeparture` (body `{"reason"}`)
+- `PUT /departures/{departureId}/capacity` -> `ChangeDepartureCapacity` (body `{"capacityPackages"}`)
 - `POST /loads` -> `OpenLoad` (201, body `{"departureId"}`)
 - `POST /loads/{loadId}/packages` -> `AddPackage` (body `{"trackingNumber"}`)
-- `POST /loads/{loadId}:close` -> `CloseLoad`, `:dispatch` -> `DispatchLoad`, `:receive` -> `ReceiveLoad`
+- `POST /loads/{loadId}/closures` -> `CloseLoad`, `POST /loads/{loadId}/dispatches` -> `DispatchLoad`, `POST /loads/{loadId}/receipts` -> `ReceiveLoad`
 - `GET /healthz` (liveness), `GET /readyz` (readiness): not business operations.
 
 ## Conventions
@@ -28,9 +28,9 @@ handlers in `handlers.go`, wired in `cmd/api/main.go`):
   `concurrent-update` 409, `validation-failed` 422; one slug per model `Err...` (`departure-full`, `departure-closed`, `lane-closed`,
   `package-already-loaded`, `load-over-capacity`, `load-already-exists`, `invalid-departure-times`, `overlapping-slots`); an unmapped error is
   an opaque 500 `internal-error`. A new `Err` needs a catalogue row, an OpenAPI mention and a case in `handlers_test.go`.
-- **Idempotency-Key** is required on all nine state-changing routes (`idempotency.go`): scope `(route, key)`, fingerprint
+- **Idempotency-Key** is required on all nine state-changing routes (`idempotency.go`): a global key, fingerprint
   `sha256(method, path, body)`; same key + same request replays the first response (header `Idempotency-Replayed: true`), same key + other
-  request is 422 `idempotency-key-reused`, missing key 400 `idempotency-key-required`, a key over 200 characters 400 `idempotency-key-invalid`,
+  request is 409 `idempotency-key-reused`, missing key 400 `idempotency-key-required`, a key over 200 characters 400 `idempotency-key-invalid`,
   keys live 24 h in `idempotency_keys`. A new state-changing route registers through `Server.keyed`, never `r.Post`.
 - **NUL** (U+0000) is rejected before anything else (`nul.go`): 404 `resource-not-found` in the path, 400 `malformed-request` elsewhere. A body
   above 64 KiB is 413 `request-body-too-large`.

@@ -23,8 +23,8 @@ The outbox relay is always on (`OUTBOX_MAX_ATTEMPTS` default 20, 0 = unlimited).
 `/healthz` = liveness; `/readyz` = drain gate + Postgres ping + Kafka metadata with an EMPTY non-nil topic list. cmd/** never imports the memory or repocontract packages. No authentication on REST. See docs/docs/overview/runtime.md.
 
 ## REST
-chi router for every operation of apis/openapi.yaml (11 routes: lane schedules, departures incl. `:cancel` and `:change-capacity`, loads incl. `/packages`, `:close`, `:dispatch`, `:receive`) plus /healthz, /readyz.
-Every state-changing route takes `Idempotency-Key` (table `idempotency_keys`, key = (route, key), 24h, replays the first response; same key + other request = 422 `idempotency-key-reused`). Errors are RFC 9457 problem+json, `type` = slug (ADR 0006).
+chi router for every operation of apis/openapi.yaml (11 routes: lane schedules, departures incl. `/cancellations` and `PUT /capacity`, loads incl. `/packages`, `/closures`, `/dispatches`, `/receipts`) plus /healthz, /readyz.
+Every state-changing route takes `Idempotency-Key` (table `idempotency_keys`, key is global (looked up by key alone), 24h, replays the first response; same key + other request = 409 `idempotency-key-reused`). Errors are RFC 9457 problem+json, `type` = slug (ADR 0006).
 
 ## Events: CloudEvents 1.0 is MANDATORY
 type `com.retailnetwork.logistics.linehaul-transportation.<entity>.<Event>` (entity: departure, load); dataschema `urn:retailnetwork:linehaul-transportation:events:<Event>:v1`.

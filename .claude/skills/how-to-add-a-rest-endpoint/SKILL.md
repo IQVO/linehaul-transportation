@@ -7,7 +7,7 @@ description: Add or change a REST endpoint in this service in the hexagonal orde
 
 Follow this order: domain first, adapter last. A handler written before the invariant it relies on validates nothing and gets bypassed.
 
-The worked example is `POST /loads/{loadId}:close`: `internal/domain/load/load.go` `Close` -> `internal/application/usecases/loads.go`
+The worked example is `POST /loads/{loadId}/closures`: `internal/domain/load/load.go` `Close` -> `internal/application/usecases/loads.go`
 `CloseLoad` -> `internal/adapters/inbound/http/handlers.go` `handleCloseLoad`. The read side example is `GET /departures/{departureId}`
 (`usecases/departures.go` `GetDeparture` -> `handleGetDeparture`).
 
