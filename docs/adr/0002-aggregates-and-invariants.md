@@ -185,7 +185,8 @@ The brief's gap register text says `destinationNodeType`; the final contracts-de
 snapshot.
 
 **A24. ListDepartures.** Filters `origin`, `destination`, `from` (inclusive), `to` (exclusive) on `cutoffAt`, plus `limit`
-(default 500, max 1000); ordered by `cutoffAt`, `departureId`. An unparsable instant or `from > to` is 422 `validation-failed`.
+(MCP and A2A: default 500, max 1000; REST: 1-500, default 100, with an opaque `cursor`, keyset over `cutoffAt`, `departureId`, ADR 0012);
+ordered by `cutoffAt`, `departureId`. An unparsable instant or `from > to` is 422 `validation-failed`.
 
 **A25. Problems.** Slugs are the model's `Err` names in kebab case without `Err`, plus the shared `not-found`,
 `illegal-transition`, `concurrent-update`, `validation-failed` (D3). `ErrLoadAlreadyExists` is the one `Err` this ADR adds. The
