@@ -120,6 +120,14 @@ func depOrderAndLimit(t *testing.T, f Fixture) {
 	if got := list(t, f, repository.DepartureFilter{Limit: 1}); got != "dep-a" {
 		t.Fatalf("limit 1: %q", got)
 	}
+	// Keyset: (cutoffAt, id) strictly after the cursor; dep-a and dep-b tie on the cutoff.
+	cut := at.Add(3 * time.Hour)
+	if got := list(t, f, repository.DepartureFilter{After: &repository.DepartureCursor{CutoffAt: cut, ID: "dep-a"}}); got != "dep-b dep-c dep-d" {
+		t.Fatalf("after dep-a: %q", got)
+	}
+	if got := list(t, f, repository.DepartureFilter{After: &repository.DepartureCursor{CutoffAt: cut, ID: "dep-b"}, Limit: 1}); got != "dep-c" {
+		t.Fatalf("after dep-b, limit 1: %q", got)
+	}
 	for i := 0; i < 3; i++ {
 		noErr(t, f.Departures.Save(context.Background(), NewDeparture(t, "dep-x"+string(rune('0'+i)), "n-9", departure.KindPickup, time.Duration(i+1)*time.Minute, 1)))
 	}

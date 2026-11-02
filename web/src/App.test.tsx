@@ -19,7 +19,7 @@ function renderUnderHost(path: string) {
 }
 
 const ROUTES = {
-  "GET /departures": json({ departures: [departure()] }),
+  "GET /departures": json({ items: [departure()] }),
   "GET /departures/dep-7f3a": json(departure()),
   "GET /departures/dep-0c2d": json(cancelledDeparture()),
 };

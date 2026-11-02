@@ -133,22 +133,22 @@ func TestKeyFromRefusesTheRest(t *testing.T) {
 	}
 }
 
-func TestHasControl(t *testing.T) {
+func TestPrintableASCII(t *testing.T) {
 	cases := []struct {
 		in   string
 		want bool
 	}{
-		{"", false},
-		{"plain-key-1", false},
-		{"space inside", false},
-		{"tab\tinside", true},
-		{"newline\n", true},
-		{"nul\x00", true},
-		{"unicode é", false}, // printable, not a control rune
+		{"plain-key-1", true},
+		{"space inside", true},
+		{"tab\tinside", false},
+		{"newline\n", false},
+		{"nul\x00", false},
+		{"unicode é", false},
+		{"del\x7f", false},
 	}
 	for _, tc := range cases {
-		if got := hasControl(tc.in); got != tc.want {
-			t.Errorf("hasControl(%q) = %v, want %v", tc.in, got, tc.want)
+		if got := printableASCII(tc.in); got != tc.want {
+			t.Errorf("printableASCII(%q) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
 }
@@ -293,8 +293,8 @@ func TestRunFreshStoresA2xxAndCommitsTheSavepoint(t *testing.T) {
 		t.Fatalf("execs = %q, want exactly the outcome UPDATE", tx.execSQL)
 	}
 	if args := tx.execArgs[0]; args[0] != http.StatusCreated || string(args[1].([]byte)) != `{"loadId":"load-1"}` ||
-		args[2] != "POST /loads" || args[3] != "key-1" {
-		t.Fatalf("UPDATE args = %v, want the recorded status, body, route and key", args)
+		args[2] != "key-1" {
+		t.Fatalf("UPDATE args = %v, want the recorded status, body and key", args)
 	}
 	if tx.commits != 1 || tx.rollbacks != 0 {
 		t.Fatalf("commits = %d, rollbacks = %d, want the transaction committed once", tx.commits, tx.rollbacks)

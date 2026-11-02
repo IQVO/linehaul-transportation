@@ -148,35 +148,43 @@ func operationCases() []operationCase {
 		{"retire a schedule", func(f *fixture) {
 			f.lane("lane-1", true)
 			f.call("POST", "/lane-schedules", `{"laneId":"lane-1","slots":[`+slotJSON+`]}`)
-		}, "POST", "/lane-schedules/lane-1:retire", "", 200, "", "state"},
-		{"retire an unknown schedule", nil, "POST", "/lane-schedules/lane-9:retire", "", 404, "not-found", ""},
-		{"list departures", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "GET", "/departures?origin=n-a&destination=n-b&limit=10&from=2026-10-23T00:00:00Z&to=2026-10-24T00:00:00Z", "", 200, "", "departures"},
+		}, "POST", "/lane-schedules/lane-1/retirements", "", 200, "", "state"},
+		{"retire an unknown schedule", nil, "POST", "/lane-schedules/lane-9/retirements", "", 404, "not-found", ""},
+		{"list departures", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "GET", "/departures?origin=n-a&destination=n-b&limit=10&from=2026-10-23T00:00:00Z&to=2026-10-24T00:00:00Z", "", 200, "", "items"},
 		{"list: a bad instant", nil, "GET", "/departures?from=yesterday", "", 422, "validation-failed", ""},
-		{"list: a bad limit", nil, "GET", "/departures?limit=0", "", 422, "validation-failed", ""},
-		{"list: a limit that is not a number", nil, "GET", "/departures?limit=x", "", 422, "validation-failed", ""},
+		{"list: a bad limit", nil, "GET", "/departures?limit=0", "", 400, "invalid-limit", ""},
+		{"list: a limit that is not a number", nil, "GET", "/departures?limit=x", "", 400, "invalid-limit", ""},
+		{"list: a limit above 500", nil, "GET", "/departures?limit=501", "", 400, "invalid-limit", ""},
+		{"list: an empty limit", nil, "GET", "/departures?limit=", "", 400, "invalid-limit", ""},
+		{"list: a repeated limit", nil, "GET", "/departures?limit=1&limit=2", "", 400, "invalid-limit", ""},
+		{"list: a cursor that does not decode", nil, "GET", "/departures?cursor=%21%21", "", 400, "invalid-cursor", ""},
+		{"list: a repeated cursor", nil, "GET", "/departures?cursor=a&cursor=b", "", 400, "invalid-cursor", ""},
+		{"list: retired after", nil, "GET", "/departures?after=x", "", 400, "unknown-query-parameter", ""},
+		{"list: retired offset", nil, "GET", "/departures?offset=1", "", 400, "unknown-query-parameter", ""},
+		{"list: retired nextToken", nil, "GET", "/departures?nextToken=1", "", 400, "unknown-query-parameter", ""},
 		{"list: from after to", nil, "GET", "/departures?from=2026-10-25T00:00:00Z&to=2026-10-24T00:00:00Z", "", 422, "validation-failed", ""},
 		{"get a departure", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "GET", "/departures/dep-1", "", 200, "", "remainingPackages"},
 		{"get an unknown departure", nil, "GET", "/departures/dep-9", "", 404, "not-found", ""},
-		{"cancel", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "POST", "/departures/dep-1:cancel", `{"reason":"planner"}`, 200, "", "cancelledAt"},
+		{"cancel", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "POST", "/departures/dep-1/cancellations", `{"reason":"planner"}`, 200, "", "cancelledAt"},
 		{"cancel twice is a no-op", func(f *fixture) {
 			f.departure("dep-1", time.Hour, 5)
-			f.call("POST", "/departures/dep-1:cancel", `{"reason":"planner"}`)
-		}, "POST", "/departures/dep-1:cancel", `{"reason":"planner"}`, 200, "", "cancelledAt"},
+			f.call("POST", "/departures/dep-1/cancellations", `{"reason":"planner"}`)
+		}, "POST", "/departures/dep-1/cancellations", `{"reason":"planner"}`, 200, "", "cancelledAt"},
 		{"cancel a departed departure", func(f *fixture) {
 			f.departure("dep-1", time.Hour, 5)
 			f.call("POST", "/loads", `{"departureId":"dep-1"}`)
-			f.call("POST", "/loads/load-1:close", "")
-			f.call("POST", "/loads/load-1:dispatch", "")
-		}, "POST", "/departures/dep-1:cancel", `{"reason":"planner"}`, 409, "illegal-transition", ""},
-		{"cancel with no reason", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "POST", "/departures/dep-1:cancel", `{}`, 422, "validation-failed", ""},
-		{"cancel unknown", nil, "POST", "/departures/dep-9:cancel", `{"reason":"x"}`, 404, "not-found", ""},
-		{"change capacity", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "POST", "/departures/dep-1:change-capacity", `{"capacityPackages":9}`, 200, "", "capacityPackages"},
+			f.call("POST", "/loads/load-1/closures", "")
+			f.call("POST", "/loads/load-1/dispatches", "")
+		}, "POST", "/departures/dep-1/cancellations", `{"reason":"planner"}`, 409, "illegal-transition", ""},
+		{"cancel with no reason", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "POST", "/departures/dep-1/cancellations", `{}`, 422, "validation-failed", ""},
+		{"cancel unknown", nil, "POST", "/departures/dep-9/cancellations", `{"reason":"x"}`, 404, "not-found", ""},
+		{"change capacity", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "PUT", "/departures/dep-1/capacity", `{"capacityPackages":9}`, 200, "", "capacityPackages"},
 		{"capacity below booked", func(f *fixture) {
 			f.departure("dep-1", time.Hour, 5)
 			f.call("POST", "/loads", `{"departureId":"dep-1"}`)
 			f.call("POST", "/loads/load-1/packages", `{"trackingNumber":"TN1"}`)
-		}, "POST", "/departures/dep-1:change-capacity", `{"capacityPackages":0}`, 409, "departure-full", ""},
-		{"capacity out of range", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "POST", "/departures/dep-1:change-capacity", `{"capacityPackages":-1}`, 422, "validation-failed", ""},
+		}, "PUT", "/departures/dep-1/capacity", `{"capacityPackages":0}`, 409, "departure-full", ""},
+		{"capacity out of range", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "PUT", "/departures/dep-1/capacity", `{"capacityPackages":-1}`, 422, "validation-failed", ""},
 		{"open a load", func(f *fixture) { f.departure("dep-1", time.Hour, 5) }, "POST", "/loads", `{"departureId":"dep-1"}`, 201, "", "loadId"},
 		{"open a second load", func(f *fixture) {
 			f.departure("dep-1", time.Hour, 5)
@@ -207,18 +215,18 @@ func operationCases() []operationCase {
 		{"close a load", func(f *fixture) {
 			f.departure("dep-1", time.Hour, 5)
 			f.call("POST", "/loads", `{"departureId":"dep-1"}`)
-		}, "POST", "/loads/load-1:close", "", 200, "", "state"},
-		{"close an unknown load", nil, "POST", "/loads/load-9:close", "", 404, "not-found", ""},
+		}, "POST", "/loads/load-1/closures", "", 200, "", "state"},
+		{"close an unknown load", nil, "POST", "/loads/load-9/closures", "", 404, "not-found", ""},
 		{"dispatch an open load", func(f *fixture) {
 			f.departure("dep-1", time.Hour, 5)
 			f.call("POST", "/loads", `{"departureId":"dep-1"}`)
-		}, "POST", "/loads/load-1:dispatch", "", 409, "illegal-transition", ""},
-		{"dispatch an unknown load", nil, "POST", "/loads/load-9:dispatch", "", 404, "not-found", ""},
-		{"receive an unknown load", nil, "POST", "/loads/load-9:receive", "", 404, "not-found", ""},
+		}, "POST", "/loads/load-1/dispatches", "", 409, "illegal-transition", ""},
+		{"dispatch an unknown load", nil, "POST", "/loads/load-9/dispatches", "", 404, "not-found", ""},
+		{"receive an unknown load", nil, "POST", "/loads/load-9/receipts", "", 404, "not-found", ""},
 		{"receive a load that did not leave", func(f *fixture) {
 			f.departure("dep-1", time.Hour, 5)
 			f.call("POST", "/loads", `{"departureId":"dep-1"}`)
-		}, "POST", "/loads/load-1:receive", "", 409, "illegal-transition", ""},
+		}, "POST", "/loads/load-1/receipts", "", 409, "illegal-transition", ""},
 	}
 }
 
@@ -229,13 +237,13 @@ func TestTheWholeLoadLifecycleOverHTTP(t *testing.T) {
 	f.departure("dep-2", time.Hour, 2)
 	f.call("POST", "/loads", `{"departureId":"dep-2"}`)
 	f.call("POST", "/loads/load-1/packages", `{"trackingNumber":"TN1"}`)
-	if st, _, b := f.call("POST", "/loads/load-1:close", ""); st != 200 || b["state"] != "CLOSED" || b["packageCount"].(float64) != 1 {
+	if st, _, b := f.call("POST", "/loads/load-1/closures", ""); st != 200 || b["state"] != "CLOSED" || b["packageCount"].(float64) != 1 {
 		t.Fatalf("close: %d %v", st, b)
 	}
-	if st, _, b := f.call("POST", "/loads/load-1:dispatch", ""); st != 200 || b["state"] != "DEPARTED" || b["departedAt"] == nil {
+	if st, _, b := f.call("POST", "/loads/load-1/dispatches", ""); st != 200 || b["state"] != "DEPARTED" || b["departedAt"] == nil {
 		t.Fatalf("dispatch: %d %v", st, b)
 	}
-	if st, _, b := f.call("POST", "/loads/load-1:receive", ""); st != 200 || b["state"] != "ARRIVED" {
+	if st, _, b := f.call("POST", "/loads/load-1/receipts", ""); st != 200 || b["state"] != "ARRIVED" {
 		t.Fatalf("receive: %d %v", st, b)
 	}
 	if st, _, b := f.call("GET", "/departures/dep-2", ""); st != 200 || b["state"] != "ARRIVED" {
@@ -252,7 +260,7 @@ func TestHealthzAndReadyzWithoutAGate(t *testing.T) {
 	}
 }
 
-func TestAnIdempotencyMiddlewareWrapsEveryPOSTAndNoGET(t *testing.T) {
+func TestAnIdempotencyMiddlewareWrapsEveryPOSTAndNoPUTOrGET(t *testing.T) {
 	store := memory.NewStore()
 	svc := usecases.New(usecases.Deps{UoW: store.UnitOfWork(), Departures: store.Departures(), Schedules: store.Schedules(), Loads: store.Loads(),
 		Nodes: store.Nodes(), Lanes: store.Lanes(), Volumes: store.Volumes(), Inbox: store.Inbox(), Outbox: store.Outbox(),
@@ -268,9 +276,9 @@ func TestAnIdempotencyMiddlewareWrapsEveryPOSTAndNoGET(t *testing.T) {
 	}
 	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc, Idempotency: mw}, nil, ""))
 	defer srv.Close()
-	for _, c := range [][2]string{{"POST", "/lane-schedules"}, {"POST", "/lane-schedules/l:retire"}, {"POST", "/departures/d:cancel"},
-		{"POST", "/departures/d:change-capacity"}, {"POST", "/loads"}, {"POST", "/loads/l/packages"}, {"POST", "/loads/l:close"},
-		{"POST", "/loads/l:dispatch"}, {"POST", "/loads/l:receive"}, {"GET", "/departures"}, {"GET", "/departures/d"}, {"GET", "/healthz"}} {
+	for _, c := range [][2]string{{"POST", "/lane-schedules"}, {"POST", "/lane-schedules/l/retirements"}, {"POST", "/departures/d/cancellations"},
+		{"PUT", "/departures/d/capacity"}, {"POST", "/loads"}, {"POST", "/loads/l/packages"}, {"POST", "/loads/l/closures"},
+		{"POST", "/loads/l/dispatches"}, {"POST", "/loads/l/receipts"}, {"GET", "/departures"}, {"GET", "/departures/d"}, {"GET", "/healthz"}} {
 		req, _ := nethttp.NewRequest(c[0], srv.URL+c[1], strings.NewReader("{}"))
 		resp, err := nethttp.DefaultClient.Do(req)
 		if err != nil {
@@ -278,10 +286,10 @@ func TestAnIdempotencyMiddlewareWrapsEveryPOSTAndNoGET(t *testing.T) {
 		}
 		_ = resp.Body.Close()
 	}
-	if len(seen) != 9 {
-		t.Fatalf("the middleware saw %d requests, want the 9 POSTs: %v", len(seen), seen)
+	if len(seen) != 8 {
+		t.Fatalf("the middleware saw %d requests, want the 8 POSTs (PUT and GET are not keyed): %v", len(seen), seen)
 	}
-	if seen[2] != "POST /departures/{departureId}:cancel" || seen[5] != "POST /loads/{loadId}/packages" {
+	if seen[2] != "POST /departures/{departureId}/cancellations" || seen[4] != "POST /loads/{loadId}/packages" {
 		t.Fatalf("the middleware is scoped by the route pattern, saw %v", seen)
 	}
 }

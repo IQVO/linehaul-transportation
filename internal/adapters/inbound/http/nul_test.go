@@ -76,7 +76,7 @@ func TestRejectNULLetsCleanRequestsThrough(t *testing.T) {
 func TestRejectNULRefusesBeforeTheHandler(t *testing.T) {
 	for _, tt := range []nulCase{
 		{"NUL escape in a JSON body is a 400", http.MethodPost, "/loads", `{"siteId":"a\u0000b"}`, http.StatusBadRequest, "malformed-request"},
-		{"raw NUL in a JSON body is a 400", http.MethodPost, "/departures/p:cancel", "{\"reason\":\"\x00\"}", http.StatusBadRequest, "malformed-request"},
+		{"raw NUL in a JSON body is a 400", http.MethodPost, "/departures/p/cancellations", "{\"reason\":\"\x00\"}", http.StatusBadRequest, "malformed-request"},
 		{"NUL in the path is a 404", http.MethodGet, "/departures/a%00b", "", http.StatusNotFound, "resource-not-found"},
 		{"encoded NUL in the query is a 400", http.MethodGet, "/departures?origin=a%00b", "", http.StatusBadRequest, "malformed-request"},
 		{"encoded NUL in a cursor is a 400", http.MethodGet, "/departures?destination=%00", "", http.StatusBadRequest, "malformed-request"},

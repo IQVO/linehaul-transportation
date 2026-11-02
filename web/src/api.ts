@@ -85,23 +85,40 @@ async function request<T>(path: string): Promise<T> {
 
 const seg = encodeURIComponent;
 
-/** A departure list as the UI uses it: the array is never undefined. */
-function normalizeList(list: DepartureList): DepartureList {
-  return { departures: list.departures ?? [] };
+/** The wire page of GET /departures (fleet REST guideline section 3). */
+interface DeparturePage {
+  items?: Departure[];
+  nextCursor?: string;
 }
 
-/** GET /departures?origin=&destination=&from=&to=&limit= -- by cutoffAt. */
+/** Page size cap of the service and a bound on the follow-the-cursor loop. */
+const MAX_PAGE_SIZE = 500;
+const MAX_PAGES = 100;
+
+/**
+ * GET /departures?origin=&destination=&from=&to=&limit=&cursor= -- by cutoffAt.
+ * Follows `nextCursor` until it is absent (never assumes one page); a `limit`
+ * is the most departures the caller wants in total.
+ */
 export async function listDepartures(q: ListDeparturesQuery): Promise<DepartureList> {
-  const res = await request<DepartureList>(
-    withQuery("/departures", {
-      origin: q.origin,
-      destination: q.destination,
-      from: q.from,
-      to: q.to,
-      limit: q.limit,
-    }),
-  );
-  return normalizeList(res);
+  const departures: Departure[] = [];
+  let cursor: string | undefined;
+  for (let pages = 0; pages < MAX_PAGES; pages++) {
+    const page = await request<DeparturePage>(
+      withQuery("/departures", {
+        origin: q.origin,
+        destination: q.destination,
+        from: q.from,
+        to: q.to,
+        limit: q.limit === undefined ? undefined : Math.min(q.limit, MAX_PAGE_SIZE),
+        cursor,
+      }),
+    );
+    departures.push(...(page.items ?? []));
+    if (!page.nextCursor || (q.limit !== undefined && departures.length >= q.limit)) break;
+    cursor = page.nextCursor;
+  }
+  return { departures: q.limit === undefined ? departures : departures.slice(0, q.limit) };
 }
 
 /** GET /departures/{departureId} (404 not-found). */
