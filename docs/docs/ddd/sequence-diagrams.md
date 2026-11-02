@@ -92,7 +92,7 @@ sequenceDiagram
     participant H as HTTP adapter
     participant S as usecases.Service
     participant PG as PostgreSQL
-    P->>H: POST /departures/{departureId}:cancel with reason
+    P->>H: POST /departures/{departureId}/cancellations with reason
     H->>S: CancelDeparture(id, reason)
     S->>PG: load departure
     alt not SCHEDULED
@@ -130,11 +130,11 @@ sequenceDiagram
     S->>PG: tracking number not on another OPEN or CLOSED load, count within capacity
     S->>PG: on LINEHAUL or AIR also book the departure and outbox DepartureCapacityChanged
     S-->>O: 200
-    O->>H: POST /loads/{loadId}:close
+    O->>H: POST /loads/{loadId}/closures
     S->>PG: load CLOSED, departure CLOSED, outbox LoadClosed on analytics
-    O->>H: POST /loads/{loadId}:dispatch
+    O->>H: POST /loads/{loadId}/dispatches
     S->>PG: load DEPARTED, departure DEPARTED, outbox LoadDeparted and DepartureDeparted
-    O->>H: POST /loads/{loadId}:receive
+    O->>H: POST /loads/{loadId}/receipts
     S->>PG: load ARRIVED, departure ARRIVED, outbox LoadArrived and DepartureArrived
 ```
 

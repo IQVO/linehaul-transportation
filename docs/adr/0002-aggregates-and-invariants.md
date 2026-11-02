@@ -180,7 +180,7 @@ load whose departure is CANCELLED are `ErrIllegalTransition`.
 load copies them, so `LoadDeparted.nodeType` is the origin's type and `LoadArrived.nodeType` the destination's without a lookup.
 The brief's gap register text says `destinationNodeType`; the final contracts-delta E3 says `nodeType`, which this service uses.
 
-**A23. ChangeDepartureCapacity (G28).** A planner command: `POST /departures/{departureId}:change-capacity`, SCHEDULED only,
+**A23. ChangeDepartureCapacity (G28).** A planner command: `PUT /departures/{departureId}/capacity`, SCHEDULED only,
 `0 <= capacityPackages <= 2147483647`, refused below `booked` (`ErrDepartureFull`), a no-op when equal. Open loads keep their
 snapshot.
 

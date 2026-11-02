@@ -70,7 +70,7 @@ Tier 1 (identical in every repo) and Tier 2 (this context's business metric):
 ### Why `linehaul.loads.dispatched`
 
 The context turns lanes into departures and reports when loads leave and arrive (ADR 0002). Of its REST commands,
-`:dispatch` is the one that moves freight: it is the moment a load leaves its origin node and `LoadDeparted` reaches
+`POST /loads/{loadId}/dispatches` is the one that moves freight: it is the moment a load leaves its origin node and `LoadDeparted` reaches
 every downstream consumer. Scheduling and capacity changes are policy and planner actions, and bookings are driven by
 other contexts' events. A falling dispatched share with a rising `illegal-transition` says operators try to dispatch
 loads that were never closed; a rising `internal-error` says the service itself is failing. It follows the fleet

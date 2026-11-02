@@ -41,7 +41,7 @@ There is no metric for the outbox backlog, consumer lag or the horizon roll: tho
 ## Traces
 
 - **Server spans**: `otelchi.Middleware` opens one span per request on every binary, named from the chi route pattern (for example
-  `POST /loads/{loadId}:close`).
+  `POST /loads/{loadId}/closures`).
 - **Outbox propagation**: when a use case enqueues an event, the relay-bound row stores `traceparent` (and `tracestate`/`baggage` when present) in its
   headers (`internal/adapters/outbound/postgres/outbox_repository.go`), so the trace continues across Kafka.
 - **Consumer spans**: each consumed message runs in a `CONSUMER` span named `<topic> process` with `messaging.system=kafka`,

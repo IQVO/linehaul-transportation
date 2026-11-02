@@ -139,7 +139,7 @@ curl -s "localhost:38480/departures?limit=2"
 ```
 
 ```json
-{"departures":[{"departureId":"dep-3b54a35b8ce988dbbd6feb8d341b2535","laneId":"LANE-SP-RJ","kind":"LINEHAUL","originNodeId":"NODE-SP-DC","destinationNodeId":"NODE-RJ-DC","cutoffAt":"2026-11-02T21:00:00Z","departsAt":"2026-11-02T21:30:00Z","arrivesAt":"2026-11-03T02:45:00Z","capacityPackages":500,"bookedPackages":0,"remainingPackages":500,"state":"SCHEDULED"},{"departureId":"dep-0630863a54ca876b42722975ec3d2150","laneId":"LANE-SP-RJ","kind":"LINEHAUL","originNodeId":"NODE-SP-DC","destinationNodeId":"NODE-RJ-DC","cutoffAt":"2026-11-05T21:00:00Z","departsAt":"2026-11-05T21:30:00Z","arrivesAt":"2026-11-06T02:45:00Z","capacityPackages":500,"bookedPackages":0,"remainingPackages":500,"state":"SCHEDULED"}]}
+{"items":[{"departureId":"dep-3b54a35b8ce988dbbd6feb8d341b2535","laneId":"LANE-SP-RJ","kind":"LINEHAUL","originNodeId":"NODE-SP-DC","destinationNodeId":"NODE-RJ-DC","cutoffAt":"2026-11-02T21:00:00Z","departsAt":"2026-11-02T21:30:00Z","arrivesAt":"2026-11-03T02:45:00Z","capacityPackages":500,"bookedPackages":0,"remainingPackages":500,"state":"SCHEDULED"},{"departureId":"dep-0630863a54ca876b42722975ec3d2150","laneId":"LANE-SP-RJ","kind":"LINEHAUL","originNodeId":"NODE-SP-DC","destinationNodeId":"NODE-RJ-DC","cutoffAt":"2026-11-05T21:00:00Z","departsAt":"2026-11-05T21:30:00Z","arrivesAt":"2026-11-06T02:45:00Z","capacityPackages":500,"bookedPackages":0,"remainingPackages":500,"state":"SCHEDULED"}]}
 ```
 
 `GET /departures/dep-nope` answers `404` with `application/problem+json`, type `https://retailnetwork.example/problems/not-found`.
@@ -155,12 +155,12 @@ curl -s -X POST localhost:38480/loads/load-06b16401-46d8-46b5-99bb-9f7d384fb8c9/
   -H 'Idempotency-Key: demo-add-pkg-1' -d '{"trackingNumber":"TRK-0001"}'
 # 200 ... "packageCount":1,"trackingNumbers":["TRK-0001"],"state":"OPEN"
 
-curl -s -X POST 'localhost:38480/loads/load-06b16401-46d8-46b5-99bb-9f7d384fb8c9:dispatch' -H 'Idempotency-Key: demo-dispatch-1'
+curl -s -X POST 'localhost:38480/loads/load-06b16401-46d8-46b5-99bb-9f7d384fb8c9/dispatches' -H 'Idempotency-Key: demo-dispatch-1'
 # 409 {"type":"https://retailnetwork.example/problems/illegal-transition","title":"Illegal state transition","status":409,"detail":"illegal transition: DispatchLoad on load load-06b1... in state OPEN", ...}
 
-curl -s -X POST 'localhost:38480/loads/load-06b16401-46d8-46b5-99bb-9f7d384fb8c9:close' -H 'Idempotency-Key: demo-close-1'
+curl -s -X POST 'localhost:38480/loads/load-06b16401-46d8-46b5-99bb-9f7d384fb8c9/closures' -H 'Idempotency-Key: demo-close-1'
 # 200 ... "state":"CLOSED"
-curl -s -X POST 'localhost:38480/loads/load-06b16401-46d8-46b5-99bb-9f7d384fb8c9:dispatch' -H 'Idempotency-Key: demo-dispatch-2'
+curl -s -X POST 'localhost:38480/loads/load-06b16401-46d8-46b5-99bb-9f7d384fb8c9/dispatches' -H 'Idempotency-Key: demo-dispatch-2'
 # 200 ... "state":"DEPARTED","departedAt":"2026-10-31T22:25:22.770828Z"
 ```
 
