@@ -18,6 +18,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"testing"
@@ -224,8 +225,17 @@ type departureView struct {
 // departures lists the departures from an origin, earliest cutoff first.
 func (s *service) departures(origin string) []departureView {
 	s.t.Helper()
-	doc := s.getJSON("/departures?origin=" + origin)
-	list, _ := doc["departures"].([]any)
+	var list []any
+	path := "/departures?limit=500&origin=" + origin
+	for path != "" {
+		doc := s.getJSON(path)
+		items, _ := doc["items"].([]any)
+		list = append(list, items...)
+		path = ""
+		if next, _ := doc["nextCursor"].(string); next != "" {
+			path = "/departures?limit=500&origin=" + origin + "&cursor=" + url.QueryEscape(next)
+		}
+	}
 	var out []departureView
 	for _, raw := range list {
 		m, _ := raw.(map[string]any)
@@ -352,7 +362,7 @@ func bookingFlow(t *testing.T, s *service, w *world) {
 	})
 
 	// Cancelling the first pickup rebooks both assignments onto the second.
-	if d := s.write(http.MethodPost, "/departures/"+w.pickup1+":cancel", `{"reason":"road closed"}`, http.StatusOK); str(d, "state") != "CANCELLED" {
+	if d := s.write(http.MethodPost, "/departures/"+w.pickup1+"/cancellations", `{"reason":"road closed"}`, http.StatusOK); str(d, "state") != "CANCELLED" {
 		t.Fatalf("cancel = %v", d)
 	}
 	if got := s.departure(w.pickup2); got["bookedPackages"] != float64(2) {
@@ -371,14 +381,14 @@ func pickupLoadFlow(t *testing.T, s *service, w *world) {
 	if l := s.write(http.MethodPost, "/loads/"+w.pickupLoad+"/packages", `{"trackingNumber":"TRK1"}`, http.StatusOK); l["packageCount"] != float64(1) {
 		t.Fatalf("add package = %v", l)
 	}
-	if l := s.write(http.MethodPost, "/loads/"+w.pickupLoad+":close", "", http.StatusOK); str(l, "state") != "CLOSED" {
+	if l := s.write(http.MethodPost, "/loads/"+w.pickupLoad+"/closures", "", http.StatusOK); str(l, "state") != "CLOSED" {
 		t.Fatalf("close = %v", l)
 	}
-	l := s.write(http.MethodPost, "/loads/"+w.pickupLoad+":dispatch", "", http.StatusOK)
+	l := s.write(http.MethodPost, "/loads/"+w.pickupLoad+"/dispatches", "", http.StatusOK)
 	if str(l, "state") != "DEPARTED" || str(l, "departureKind") != "PICKUP" {
 		t.Fatalf("dispatch = %v", l)
 	}
-	if l = s.write(http.MethodPost, "/loads/"+w.pickupLoad+":receive", "", http.StatusOK); str(l, "state") != "ARRIVED" {
+	if l = s.write(http.MethodPost, "/loads/"+w.pickupLoad+"/receipts", "", http.StatusOK); str(l, "state") != "ARRIVED" {
 		t.Fatalf("receive = %v", l)
 	}
 	if d := s.departure(w.pickup2); str(d, "state") != "ARRIVED" {
@@ -412,12 +422,12 @@ func lineHaulFlow(t *testing.T, s *service, w *world) {
 	if d := s.departure(w.linehaul); d["bookedPackages"] != float64(1) {
 		t.Fatalf("a line-haul package is booked on its departure, got %v", d)
 	}
-	s.write(http.MethodPost, "/loads/"+w.lineLoad+":close", "", http.StatusOK)
-	s.write(http.MethodPost, "/loads/"+w.lineLoad+":dispatch", "", http.StatusOK)
-	if l := s.write(http.MethodPost, "/loads/"+w.lineLoad+":receive", "", http.StatusOK); str(l, "state") != "ARRIVED" {
+	s.write(http.MethodPost, "/loads/"+w.lineLoad+"/closures", "", http.StatusOK)
+	s.write(http.MethodPost, "/loads/"+w.lineLoad+"/dispatches", "", http.StatusOK)
+	if l := s.write(http.MethodPost, "/loads/"+w.lineLoad+"/receipts", "", http.StatusOK); str(l, "state") != "ARRIVED" {
 		t.Fatalf("receive = %v", l)
 	}
-	if r := s.call(http.MethodPost, "/lane-schedules/ln-2:retire", "", "retire-1"); r.status != http.StatusOK {
+	if r := s.call(http.MethodPost, "/lane-schedules/ln-2/retirements", "", "retire-1"); r.status != http.StatusOK {
 		t.Fatalf("retire = %d %s", r.status, r.body)
 	}
 }
@@ -430,9 +440,9 @@ func assertIdempotency(t *testing.T, s *service, w world) {
 	if first.status != http.StatusCreated || first.status != second.status || !bytes.Equal(first.body, second.body) {
 		t.Fatalf("first %d %s, replay %d %s", first.status, first.body, second.status, second.body)
 	}
-	if r := s.call(http.MethodPost, "/loads", `{"departureId":"other"}`, "replay-1"); r.status != http.StatusUnprocessableEntity ||
+	if r := s.call(http.MethodPost, "/loads", `{"departureId":"other"}`, "replay-1"); r.status != http.StatusConflict ||
 		!strings.Contains(string(r.body), "idempotency-key-reused") {
-		t.Fatalf("conflicting body = %d %s, want 422 idempotency-key-reused", r.status, r.body)
+		t.Fatalf("conflicting body = %d %s, want 409 idempotency-key-reused", r.status, r.body)
 	}
 	if r := s.call(http.MethodPost, "/loads", body, ""); r.status != http.StatusBadRequest {
 		t.Fatalf("no key = %d, want 400", r.status)
@@ -698,7 +708,7 @@ func assertKafkaDown(t *testing.T, s *service) {
 		t.Fatalf("/healthz = %d with Kafka down, want 200 (liveness)", h.status)
 	}
 	free := s.scheduled("fc-1", "PICKUP", 4)
-	s.write(http.MethodPost, "/departures/"+free[len(free)-1].ID+":cancel", `{"reason":"kafka is down"}`, http.StatusOK)
+	s.write(http.MethodPost, "/departures/"+free[len(free)-1].ID+"/cancellations", `{"reason":"kafka is down"}`, http.StatusOK)
 	if pending := s.count(`SELECT count(*) FROM outbox_events WHERE published_at IS NULL`); pending < 1 {
 		t.Fatalf("a write with Kafka down left %d unpublished outbox rows, want it queued", pending)
 	}

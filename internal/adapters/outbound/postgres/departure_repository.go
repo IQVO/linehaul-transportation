@@ -91,6 +91,10 @@ func (r *DepartureRepo) List(ctx context.Context, f repository.DepartureFilter) 
 	if f.HasRoom {
 		where = append(where, "booked_packages < capacity_packages")
 	}
+	if f.After != nil {
+		args = append(args, f.After.CutoffAt.UTC(), f.After.ID)
+		where = append(where, fmt.Sprintf("(cutoff_at, id) > ($%d, $%d)", len(args)-1, len(args)))
+	}
 	limit := f.Limit
 	if limit == 0 {
 		limit = repository.DefaultListLimit

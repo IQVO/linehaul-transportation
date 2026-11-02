@@ -22,7 +22,7 @@ describe("the API base", () => {
 
 describe("requests", () => {
   it("lists departures with the filters as query parameters and no custom header", async () => {
-    const api = mockApi({ "GET /departures": json({ departures: [departure()] }) });
+    const api = mockApi({ "GET /departures": json({ items: [departure()] }) });
     const list = await listDepartures({
       origin: "n-a", destination: "n-b", from: "2026-10-24T08:00:00Z", to: "2026-10-25T08:00:00Z", limit: 25,
     });
@@ -47,9 +47,28 @@ describe("requests", () => {
     expect(api.calls.map((c) => c.path)).toEqual(["/departures/dep%207"]);
   });
 
+  it("follows nextCursor until it is absent", async () => {
+    const api = mockApi({
+      "GET /departures": (call) =>
+        call.query.get("cursor") === "c2"
+          ? json({ items: [departure({ departureId: "dep-2" })] })
+          : json({ items: [departure({ departureId: "dep-1" })], nextCursor: "c2" }),
+    });
+    const list = await listDepartures({});
+    expect(list.departures.map((d) => d.departureId)).toEqual(["dep-1", "dep-2"]);
+    expect(api.calls.map((c) => c.query.get("cursor"))).toEqual([null, "c2"]);
+  });
+
+  it("stops at the caller's limit", async () => {
+    const api = mockApi({ "GET /departures": json({ items: [departure()], nextCursor: "more" }) });
+    const list = await listDepartures({ limit: 1 });
+    expect(list.departures).toHaveLength(1);
+    expect(api.calls).toHaveLength(1);
+  });
+
   it("calls nothing but this context's API", async () => {
     const api = mockApi({
-      "GET /departures": json({ departures: [] }),
+      "GET /departures": json({ items: [] }),
       "GET /departures/dep-7f3a": json(departure()),
     });
     await listDepartures({});

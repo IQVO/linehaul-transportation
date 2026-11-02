@@ -64,21 +64,21 @@ func NewRouter(s *Server, logger *slog.Logger, serviceName string) http.Handler 
 	r.Get("/readyz", s.handleReadyz)
 
 	s.keyed(r, http.MethodPost, "/lane-schedules", s.handleDefineLaneSchedule)
-	s.keyed(r, http.MethodPost, "/lane-schedules/{laneId}:retire", s.handleRetireLaneSchedule)
-	s.keyed(r, http.MethodPost, "/departures/{departureId}:cancel", s.handleCancelDeparture)
-	s.keyed(r, http.MethodPost, "/departures/{departureId}:change-capacity", s.handleChangeDepartureCapacity)
+	s.keyed(r, http.MethodPost, "/lane-schedules/{laneId}/retirements", s.handleRetireLaneSchedule)
+	s.keyed(r, http.MethodPost, "/departures/{departureId}/cancellations", s.handleCancelDeparture)
+	r.Put("/departures/{departureId}/capacity", s.handleChangeDepartureCapacity)
 	s.keyed(r, http.MethodPost, "/loads", s.handleOpenLoad)
 	s.keyed(r, http.MethodPost, "/loads/{loadId}/packages", s.handleAddPackage)
-	s.keyed(r, http.MethodPost, "/loads/{loadId}:close", s.handleCloseLoad)
-	s.keyed(r, http.MethodPost, "/loads/{loadId}:dispatch", s.handleDispatchLoad)
-	s.keyed(r, http.MethodPost, "/loads/{loadId}:receive", s.handleReceiveLoad)
+	s.keyed(r, http.MethodPost, "/loads/{loadId}/closures", s.handleCloseLoad)
+	s.keyed(r, http.MethodPost, "/loads/{loadId}/dispatches", s.handleDispatchLoad)
+	s.keyed(r, http.MethodPost, "/loads/{loadId}/receipts", s.handleReceiveLoad)
 	r.Get("/departures", s.handleListDepartures)
 	r.Get("/departures/{departureId}", s.handleGetDeparture)
 	return r
 }
 
 // keyed registers a state-changing route behind the Idempotency-Key middleware
-// (scope: the route pattern, e.g. "POST /loads/{loadId}:close"); a nil
+// (scope: the route pattern, e.g. "POST /loads/{loadId}/closures"); a nil
 // Idempotency (handler unit tests only) leaves it unwrapped.
 func (s *Server) keyed(r chi.Router, method, pattern string, h http.HandlerFunc) {
 	if s.Idempotency == nil {
