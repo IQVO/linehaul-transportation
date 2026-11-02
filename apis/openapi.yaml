@@ -83,6 +83,8 @@ paths:
           $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /lane-schedules/{laneId}/retirements:
     post:
       tags: [Lane schedules]
@@ -115,6 +117,8 @@ paths:
           $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /departures:
     get:
       tags: [Departures]
@@ -166,6 +170,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /departures/{departureId}:
     get:
       tags: [Departures]
@@ -183,6 +189,8 @@ paths:
                 $ref: '#/components/schemas/Departure'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /departures/{departureId}/cancellations:
     post:
       tags: [Departures]
@@ -224,6 +232,8 @@ paths:
           $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /departures/{departureId}/capacity:
     put:
       tags: [Departures]
@@ -256,10 +266,10 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-        '413':
-          $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /loads:
     post:
       tags: [Loads]
@@ -298,6 +308,8 @@ paths:
           $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /loads/{loadId}/packages:
     post:
       tags: [Loads]
@@ -341,6 +353,8 @@ paths:
           $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /loads/{loadId}/closures:
     post:
       tags: [Loads]
@@ -373,6 +387,8 @@ paths:
           $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /loads/{loadId}/dispatches:
     post:
       tags: [Loads]
@@ -405,6 +421,8 @@ paths:
           $ref: '#/components/responses/TooLarge'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /loads/{loadId}/receipts:
     post:
       tags: [Loads]
@@ -434,6 +452,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/TooLarge'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   parameters:
     IdempotencyKey:
@@ -511,8 +535,19 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: >-
+        Unexpected failure (problem type internal-error); the detail never
+        carries the internal message. A 5xx is never stored by the
+        Idempotency-Key middleware, so the same key can retry.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     NotFound:
-      description: Unknown id (problem type not-found).
+      description: >-
+        Unknown id (problem type not-found), or a NUL character in the request
+        path (problem type resource-not-found).
       content:
         application/problem+json:
           schema:
@@ -534,6 +569,8 @@ components:
       description: >-
         Validation failure. Types: overlapping-slots (ErrOverlappingSlots),
         invalid-departure-times (ErrInvalidDepartureTimes) and validation-failed.
+        An empty request body is decoded as all-zero values and fails here
+        (validation-failed), not as a 400.
       content:
         application/problem+json:
           schema:
@@ -542,7 +579,7 @@ components:
     Problem:
       type: object
       description: RFC 9457 problem details.
-      required: [type, title, status]
+      required: [type, title, status, detail, instance]
       properties:
         type:
           type: string
@@ -559,6 +596,7 @@ components:
           example: booked equals capacity on this departure
         instance:
           type: string
+          description: Escaped request path.
     DepartureKind:
       type: string
       enum: [PICKUP, LINEHAUL, AIR]
@@ -635,6 +673,7 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+          description: Trimmed, without control characters (validation-failed otherwise).
     ChangeDepartureCapacityRequest:
       type: object
       required: [capacityPackages]
@@ -712,6 +751,7 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+          description: Trimmed, without control characters (validation-failed otherwise).
     Load:
       type: object
       required: [loadId, departureId, departureKind, originNodeId, destinationNodeId, capacityPackages, packageCount, trackingNumbers, state]
