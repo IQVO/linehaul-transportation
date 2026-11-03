@@ -23,7 +23,7 @@ func twoDepartures(t *testing.T, f Fixture, ctx context.Context) error {
 	if err := f.Departures.Save(ctx, d1); err != nil {
 		return err
 	}
-	if _, err := f.Inbox.Claim(ctx, "node-topology", "evt-1", at); err != nil {
+	if _, err := f.Inbox.Claim(ctx, ctxNodeTopology, evt1, at); err != nil {
 		return err
 	}
 	if err := f.Outbox.Append(ctx, departureScheduledEvent(t, d2)); err != nil {
@@ -52,7 +52,7 @@ func outboxCount(t *testing.T, f Fixture) int {
 
 func claimable(t *testing.T, f Fixture) bool {
 	t.Helper()
-	first, err := f.Inbox.Claim(context.Background(), "node-topology", "evt-1", at)
+	first, err := f.Inbox.Claim(context.Background(), ctxNodeTopology, evt1, at)
 	noErr(t, err)
 	return first
 }

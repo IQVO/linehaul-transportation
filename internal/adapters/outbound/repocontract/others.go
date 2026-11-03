@@ -116,7 +116,7 @@ func nodeEligible(t *testing.T, f Fixture) {
 	suspended := NewNodeView("n-s")
 	suspended.Status = network.StatusSuspended
 	noErr(t, f.Nodes.Save(ctx, suspended))
-	noErr(t, f.Nodes.Save(ctx, network.NodeView{ID: "n-sc", Type: network.SortationCenter, Operator: network.OperatorNetwork, Timezone: "UTC", Status: network.StatusActive}))
+	noErr(t, f.Nodes.Save(ctx, network.NodeView{ID: nodeSC, Type: network.SortationCenter, Operator: network.OperatorNetwork, Timezone: "UTC", Status: network.StatusActive}))
 	got, err := f.Nodes.ListPickupEligible(ctx)
 	noErr(t, err)
 	var order []string
@@ -177,8 +177,8 @@ func inboxClaim(t *testing.T, f Fixture) {
 		consumer, id string
 		want         bool
 	}{
-		{"node-topology", "evt-1", true}, {"node-topology", "evt-1", false}, {"order-sourcing", "evt-1", true},
-		{"node-topology", "evt-2", true}, {"order-sourcing", "evt-1", false},
+		{ctxNodeTopology, evt1, true}, {ctxNodeTopology, evt1, false}, {"order-sourcing", evt1, true},
+		{ctxNodeTopology, "evt-2", true}, {"order-sourcing", evt1, false},
 	} {
 		got, err := f.Inbox.Claim(ctx, c.consumer, c.id, at)
 		noErr(t, err)

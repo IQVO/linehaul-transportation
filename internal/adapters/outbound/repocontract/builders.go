@@ -11,11 +11,22 @@ import (
 	"github.com/claudioed/linehaul-transportation/internal/domain/volume"
 )
 
+// Fixture node ids, departure ids and expected id lists shared by the
+// contract suites in this package.
+const (
+	nodeSC          = "n-sc"
+	depA            = "dep-a"
+	depAB           = "dep-a dep-b"
+	depABC          = "dep-a dep-b dep-c"
+	evt1            = "evt-1"
+	ctxNodeTopology = "node-topology"
+)
+
 // NewDeparture builds a SCHEDULED departure whose cutoff is `in` after the contract instant.
 func NewDeparture(t *testing.T, id, origin string, kind departure.Kind, in time.Duration, capacity int) *departure.Departure {
 	t.Helper()
 	d, _, err := departure.Schedule(departure.Spec{
-		ID: departure.ID(id), LaneID: "lane-1", Kind: kind, OriginNodeID: origin, DestinationNodeID: "n-sc",
+		ID: departure.ID(id), LaneID: "lane-1", Kind: kind, OriginNodeID: origin, DestinationNodeID: nodeSC,
 		OriginType: network.FulfillmentCenter, DestinationType: network.SortationCenter,
 		CutoffAt: at.Add(in), DepartsAt: at.Add(in), ArrivesAt: at.Add(in + 2*time.Hour), CapacityPackages: capacity,
 	}, true, at)
