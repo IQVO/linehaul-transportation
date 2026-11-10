@@ -57,10 +57,13 @@ type ReassignedInput struct {
 	ToNodeID     string
 }
 
-// LockedInput is what FulfillmentLocked tells this context.
+// LockedInput is what FulfillmentLocked tells this context. ConsolidatedInto is
+// the carrier's assignment id when the lock is a follower of a merged package
+// (ADR 0014); empty for every other lock.
 type LockedInput struct {
-	AssignmentID string
-	Facts        volume.Facts
+	AssignmentID     string
+	ConsolidatedInto string
+	Facts            volume.Facts
 }
 
 // AssignmentInput names an assignment (FulfillmentCancelled).
@@ -261,9 +264,14 @@ func (s *Service) HandleCancelled(ctx context.Context, eventID string, in Assign
 
 // HandleLocked applies FulfillmentLocked, policy BookOnLock: it books one
 // package on the pickup departure, or rebooks onto the next one from the same
-// origin (BookingMoved), or reports BookingFailed (ADR 0002 A13, A14).
+// origin (BookingMoved), or reports BookingFailed (ADR 0002 A13, A14). The lock
+// of a follower of a merged package (ConsolidatedInto set) books nothing: the
+// carrier's lock books the one package that ships (ADR 0014).
 func (s *Service) HandleLocked(ctx context.Context, eventID string, in LockedInput) error {
 	return s.consume(ctx, ConsumerOrderSourcing, eventID, func(ctx context.Context) ([]shared.Event, error) {
+		if in.ConsolidatedInto != "" {
+			return nil, nil
+		}
 		vol, err := s.volumeRow(ctx, in.AssignmentID)
 		if err != nil {
 			return nil, err

@@ -91,6 +91,8 @@ type (
 		GroupNo      int    `json:"groupNo"`
 		NodeID       string `json:"nodeId"`
 		DepartureID  string `json:"pickupDepartureId"`
+		// ConsolidatedInto is set on the lock of a follower of a merged package (ADR 0014).
+		ConsolidatedInto string `json:"consolidatedInto"`
 	}
 	assignmentData struct {
 		AssignmentID string `json:"assignmentId"`
@@ -167,7 +169,7 @@ func OrderSourcingHandlers(s *usecases.Service) map[string]HandlerFunc {
 			return s.HandleReassigned(ctx, id, usecases.ReassignedInput{AssignmentID: d.AssignmentID, ToNodeID: d.ToNodeID})
 		}),
 		TypeLocked: handle(func(ctx context.Context, id string, d lockedData) error {
-			return s.HandleLocked(ctx, id, usecases.LockedInput{AssignmentID: d.AssignmentID,
+			return s.HandleLocked(ctx, id, usecases.LockedInput{AssignmentID: d.AssignmentID, ConsolidatedInto: d.ConsolidatedInto,
 				Facts: volume.Facts{OrderID: d.OrderID, GroupNo: d.GroupNo, NodeID: d.NodeID, DepartureID: departure.ID(d.DepartureID)}})
 		}),
 		TypeCancelled: handle(func(ctx context.Context, id string, d assignmentData) error {

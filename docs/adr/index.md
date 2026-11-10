@@ -26,3 +26,4 @@ one. The *Status* column is copied from each ADR's own `## Status` section.
 | [0010](./0010-fleet-observability-standard.md) | the fleet observability standard: trace-correlated logs, OTLP metrics and traces, the `linehaul.loads.dispatched` counter | Accepted (2026-10-26) |
 | [0011](./0011-a2a-inbound-adapter.md) | the A2A inbound adapter: a read-only Agent2Agent agent over the departure reads | Accepted (2026-10-30) |
 | [0012](./0012-adopt-the-fleet-rest-api-guideline.md) | adopt the fleet REST API guideline: noun routes, global Idempotency-Key with 409 reuse, keyset paging | Accepted (2026-11-01) |
+| [0014](./0014-consolidated-follower-lock-books-nothing.md) | a follower lock books nothing: one merged package books one package | Accepted (2026-11-10) |

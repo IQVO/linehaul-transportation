@@ -24,6 +24,17 @@ Feature: Booking a locked assignment on its pickup departure
     When the lock of "as-1" on "P1" is delivered again as a new event
     Then the departure "P1" holds 1 booked package
 
+  Scenario: Merged orders book one package: the carrier's lock books, the follower's books nothing
+    When the assignment "as-2" merged into "as-1" is locked on "P1"
+    Then the command succeeds
+    And the departure "P1" holds 0 booked packages
+    And the assignment "as-2" has no volume row
+    And no event was published by the last command
+    When the assignment "as-1" is locked on "P1"
+    Then the departure "P1" holds 1 booked package
+    And the assignment "as-1" is booked on "P1"
+    And the assignment "as-2" has no volume row
+
   Scenario: A full departure moves the booking to the next one
     Given the capacity of "P1" is changed to 1
     And the assignment "as-1" is locked on "P1"
