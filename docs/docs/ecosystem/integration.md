@@ -39,7 +39,7 @@ Source: `internal/adapters/inbound/kafka/handlers.go`, `consumer.go`; contract c
 | node-topology | `...lane.LaneClosed` | `laneId` | Lane closed: no new departures |
 | order-sourcing | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `assignmentId`, `releaseNo`, `orderId`, `groupNo`, `nodeId`, `pickupDepartureId` | Records the expected volume |
 | order-sourcing | `...assignment.FulfillmentReassigned` | `assignmentId`, `toNodeId` | Updates the node |
-| order-sourcing | `...assignment.FulfillmentLocked` | `assignmentId`, `orderId`, `groupNo`, `nodeId`, `pickupDepartureId` | Books capacity (`BookOnLock`) |
+| order-sourcing | `...assignment.FulfillmentLocked` | `assignmentId`, `orderId`, `groupNo`, `nodeId`, `pickupDepartureId`, optional `consolidatedInto` | Books capacity (`BookOnLock`); a lock with `consolidatedInto` (a follower of a merged package) books nothing, the carrier's lock books the one package (ADR 0014) |
 | order-sourcing | `...assignment.FulfillmentCancelled` | `assignmentId` | Marks the volume cancelled |
 | shipping-and-tracking | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | `assignmentId`, `trackingNumber` | Adds the tracking number |
 | shipping-and-tracking | `...label.LabelVoided` | `trackingNumber` | Removes it |

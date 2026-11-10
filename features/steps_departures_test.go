@@ -19,6 +19,8 @@ func registerDepartureSteps(sc *godog.ScenarioContext, w *world) {
 	sc.Step(`^the capacity of every pickup departure of "([^"]*)" is changed to (\d+)$`, w.changeAllCapacities)
 	sc.Step(`^the assignment "([^"]*)" is locked on "([^"]*)"$`, w.lock)
 	sc.Step(`^the lock of "([^"]*)" on "([^"]*)" is delivered again as a new event$`, w.lock)
+	sc.Step(`^the assignment "([^"]*)" merged into "([^"]*)" is locked on "([^"]*)"$`, w.lockFollower)
+	sc.Step(`^the assignment "([^"]*)" has no volume row$`, w.hasNoVolume)
 	sc.Step(`^the departure "([^"]*)" is cancelled because "([^"]*)"$`, w.cancelDeparture)
 	sc.Step(`^the departure "([^"]*)" holds (\d+) booked packages?$`, w.holdsBooked)
 	sc.Step(`^the departure "([^"]*)" is (SCHEDULED|CLOSED|DEPARTED|ARRIVED|CANCELLED)$`, w.departureIs)
@@ -79,6 +81,15 @@ func (w *world) changeAllCapacities(origin, capacity string) {
 }
 
 func (w *world) lock(assignment, alias string) {
+	w.lockInto(assignment, "", alias)
+}
+
+// lockFollower delivers the lock of a follower of a merged package (ADR 0014).
+func (w *world) lockFollower(assignment, carrier, alias string) {
+	w.lockInto(assignment, carrier, alias)
+}
+
+func (w *world) lockInto(assignment, carrier, alias string) {
 	id := w.depID(alias)
 	w.run(func() error {
 		d, err := w.svc.GetDeparture(w.ctx(), id)
@@ -86,10 +97,18 @@ func (w *world) lock(assignment, alias string) {
 			return err
 		}
 		return w.svc.HandleLocked(w.ctx(), w.eventID(), usecases.LockedInput{
-			AssignmentID: assignment,
-			Facts:        volume.Facts{OrderID: "or-" + assignment, GroupNo: 1, NodeID: d.OriginNodeID, DepartureID: departure.ID(id)},
+			AssignmentID:     assignment,
+			ConsolidatedInto: carrier,
+			Facts:            volume.Facts{OrderID: "or-" + assignment, GroupNo: 1, NodeID: d.OriginNodeID, DepartureID: departure.ID(id)},
 		})
 	})
+}
+
+func (w *world) hasNoVolume(assignment string) error {
+	if _, err := w.store.Volumes().Get(w.ctx(), assignment); err == nil {
+		return fmt.Errorf("assignment %s has a volume row, want none", assignment)
+	}
+	return nil
 }
 
 func (w *world) cancelDeparture(alias, reason string) {
