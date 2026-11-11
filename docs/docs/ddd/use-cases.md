@@ -64,7 +64,7 @@ Each handler runs as `consume(consumer, eventId, ...)`: claim, apply, enqueue ev
 | `HandleLaneClosed` | `LaneClosed` | Marks the lane closed: no new departure is scheduled on it (A12); unknown lane is ignored | none |
 | `HandleReleased` | order-sourcing `FulfillmentReleasedToNode` | Records the assignment's expected volume (RELEASED) with its planned pickup departure | none |
 | `HandleReassigned` | `FulfillmentReassigned` | Updates the node of the expected volume only (A16) | none |
-| `HandleLocked` (policy `BookOnLock`) | `FulfillmentLocked` | Books one package on the pickup departure; if it is unknown, cancelled, closed or full, rebooks on the next PICKUP departure from the same origin or records the failure (A13, A14) | `DepartureCapacityChanged`, `BookingMoved`, `BookingFailed` |
+| `HandleLocked` (policy `BookOnLock`) | `FulfillmentLocked` | Books one package on the pickup departure (a follower lock, `consolidatedInto` set, only claims the event: the carrier's lock books the merged package, ADR 0014); if it is unknown, cancelled, closed or full, rebooks on the next PICKUP departure from the same origin or records the failure (A13, A14) | `DepartureCapacityChanged`, `BookingMoved`, `BookingFailed` |
 | `HandleCancelled` | `FulfillmentCancelled` | Marks the expected volume CANCELLED; the booking is not released (A16) | none |
 | `HandleLabelIssued` | shipping-and-tracking `LabelIssued` | Adds the tracking number to the assignment's expected volume (A18) | none |
 | `HandleLabelVoided` | `LabelVoided` | Removes the tracking number from the projection; the booking stays (A18) | none |

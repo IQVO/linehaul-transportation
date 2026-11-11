@@ -160,7 +160,7 @@ operations:
     action: receive
     title: Receive the assignment events that feed ExpectedVolumeView and book pickup capacity
     summary: Receive the assignment events that feed ExpectedVolumeView and book pickup capacity.
-    description: 'Reads `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked` and `FulfillmentCancelled` (key and subject: assignmentId) under the consumer group read from `ORDER_SOURCING_CONSUMER_GROUP`. Dispatch is on the full `type`; every other type is ignored. `FulfillmentLocked` books one package on the pickup departure (policy BookOnLock) or, when it cannot, rebooks onto the next departure from the same origin and publishes BookingMoved or BookingFailed. The other three only update ExpectedVolumeView: assignments are reassigned and cancelled before LOCKED, so there is nothing to release (gap G15).'
+    description: 'Reads `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked` and `FulfillmentCancelled` (key and subject: assignmentId) under the consumer group read from `ORDER_SOURCING_CONSUMER_GROUP`. Dispatch is on the full `type`; every other type is ignored. `FulfillmentLocked` books one package on the pickup departure (policy BookOnLock; a follower lock carrying `consolidatedInto` books nothing, ADR 0014) or, when it cannot, rebooks onto the next departure from the same origin and publishes BookingMoved or BookingFailed. The other three only update ExpectedVolumeView: assignments are reassigned and cancelled before LOCKED, so there is nothing to release (gap G15).'
     tags:
     - name: consumed
     channel:
@@ -738,7 +738,7 @@ components:
       name: FulfillmentLocked
       title: An assignment was locked on its node and pickup departure
       summary: An assignment was locked on its node and pickup departure.
-      description: 'Consumed. `type` = `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked`. Policy BookOnLock: books one package on `pickupDepartureId`. A repeated lock of the same assignment books nothing twice. Relied on: `assignmentId`, `orderId`, `groupNo`, `nodeId`, `pickupDepartureId`.'
+      description: 'Consumed. `type` = `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked`. Policy BookOnLock: books one package on `pickupDepartureId`. A repeated lock of the same assignment books nothing twice. When `consolidatedInto` is present the lock is that of a follower of a merged package: it is claimed in the inbox and books nothing (no row, no event), because the carrier''s lock (no `consolidatedInto`) books the one package that ships (ADR 0014). Absent `consolidatedInto` means unmerged. `mergedAssignmentIds`, if sent, is ignored. Relied on: `assignmentId`, `orderId`, `groupNo`, `nodeId`, `pickupDepartureId`, `consolidatedInto` (optional).'
       contentType: application/cloudevents+json
       tags:
       - name: consumed
@@ -1388,6 +1388,9 @@ components:
                 type: string
               pickupDepartureId:
                 type: string
+              consolidatedInto:
+                type: string
+                description: Optional. The carrier's assignment id, present only on the lock of a follower of a merged package; such a lock books nothing. Absent means unmerged.
             required:
             - assignmentId
             - orderId
