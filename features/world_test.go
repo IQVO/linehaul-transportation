@@ -41,6 +41,8 @@ type world struct {
 	errInspected bool
 	outboxBefore int
 	scheduled    int
+
+	rules rulesState
 }
 
 func newWorld() *world {
@@ -58,6 +60,7 @@ func (w *world) reset() {
 	})
 	w.lanes, w.departures, w.loads = map[string]network.LaneView{}, map[string]string{}, map[string]string{}
 	w.eventSeq, w.lastErr, w.errInspected, w.outboxBefore, w.scheduled = 0, nil, true, 0, 0
+	w.rules = rulesState{}
 }
 
 func (w *world) ctx() context.Context { return context.Background() }
