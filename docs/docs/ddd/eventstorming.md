@@ -38,7 +38,7 @@ flowchart LR
     E4(["DepartureCapacityChanged"]):::event
     E5(["BookingMoved"]):::event
     E6(["BookingFailed"]):::event
-    H1["Hotspot: BookingFailed has no follow-up here"]:::hot
+    H1["Hotspot: BookingFailed leaves the assignment FAILED here; order-sourcing records it only, delivery-promise flags the promise AT_RISK"]:::hot
 
     C4["CancelDeparture"]:::command
     E7(["DepartureCancelled"]):::event
@@ -79,7 +79,7 @@ Source: `internal/domain/departure/events.go`, `internal/domain/load/events.go`,
 
 | Hotspot | State |
 | --- | --- |
-| `BookingFailed` is received by order-sourcing but changes no state there; what happens to an assignment that no pickup can hold is not decided in either context | open |
+| `BookingFailed` leaves the assignment FAILED in this context (ADR 0002 A14). order-sourcing records it as processed and changes no state (its handler: the departure's own cancellation or capacity events drive re-optimisation); delivery-promise flags the assignment's promise AT_RISK and skips that departure when re-promising (RepromiseOnRisk) | open for the booking itself; the promise side is handled |
 | `FulfillmentCancelled` only updates the expected volume (ADR 0002 A16): it never releases the package booked on a departure | accepted assumption |
 | A `LabelVoided` removes the tracking number but keeps the booking (A18) | accepted assumption |
 | Outbox backlog, consumer lag and dead letters are not metered | open, see [Observability](/docs/operations/observability) |

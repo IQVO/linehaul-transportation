@@ -349,7 +349,7 @@ components:
       name: LoadDeparted
       title: A load left its origin node
       summary: A load left its origin node.
-      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted`; stream `events`; subject and key = loadId. Raised by DispatchLoad. `departureKind` (PICKUP, LINEHAUL or AIR, gap G3) lets shipping-and-tracking recognise the pickup load whose first scan is the handover; `nodeType` is the type of the node where the load departed (the origin). Consumer: shipping-and-tracking.'
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted`; stream `events`; subject and key = loadId. Raised by DispatchLoad. `departureKind` (PICKUP, LINEHAUL or AIR, gap G3) lets shipping-and-tracking recognise the pickup load whose first scan is the handover; `nodeType` is the type of the node where the load departed (the origin). Consumers: shipping-and-tracking, delivery-promise.'
       contentType: application/cloudevents+json
       tags:
       - name: load
@@ -381,7 +381,7 @@ components:
       name: LoadArrived
       title: A load reached its destination node
       summary: A load reached its destination node.
-      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived`; stream `events`; subject and key = loadId. Raised by ReceiveLoad. `departureKind` (gap G3) and `nodeType`, the type of the node where the load arrived (the destination), let shipping-and-tracking tell an arrival at a station from one at a sort centre. Consumers: shipping-and-tracking, last-mile-delivery.'
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived`; stream `events`; subject and key = loadId. Raised by ReceiveLoad. `departureKind` (gap G3) and `nodeType`, the type of the node where the load arrived (the destination), let shipping-and-tracking tell an arrival at a station from one at a sort centre. Consumers: shipping-and-tracking, last-mile-delivery, delivery-promise.'
       contentType: application/cloudevents+json
       tags:
       - name: load
@@ -439,7 +439,7 @@ components:
       name: BookingFailed
       title: A booked assignment could not be placed on any departure
       summary: A booked assignment could not be placed on any departure.
-      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.BookingFailed`; stream `events`; subject and key = departureId. Gap G14 (contracts-delta E13). Raised when the booking cannot be held (`reason`: DEPARTURE_CANCELLED, DEPARTURE_CLOSED, DEPARTURE_FULL or DEPARTURE_UNKNOWN, for `departureId`, the departure the assignment was locked on or booked on) and no later SCHEDULED departure from the same origin has room. Subject and key: `departureId`. Consumers: delivery-promise, order-sourcing (re-promise).'
+      description: '`type` = `com.retailnetwork.logistics.linehaul-transportation.departure.BookingFailed`; stream `events`; subject and key = departureId. Gap G14 (contracts-delta E13). Raised when the booking cannot be held (`reason`: DEPARTURE_CANCELLED, DEPARTURE_CLOSED, DEPARTURE_FULL or DEPARTURE_UNKNOWN, for `departureId`, the departure the assignment was locked on or booked on) and no later SCHEDULED departure from the same origin has room. Subject and key: `departureId`. Consumers: delivery-promise (flags the promise of the assignment AT_RISK), order-sourcing (records it, changes no state).'
       contentType: application/cloudevents+json
       tags:
       - name: departure
