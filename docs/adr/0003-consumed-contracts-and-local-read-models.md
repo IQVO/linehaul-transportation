@@ -64,3 +64,11 @@ context may call `GET /departures` (Open Host Service).
 
 - The service keeps working when a sibling is down; its inputs are stale instead of missing.
 - A new consumed type needs a receive message in `apis/asyncapi.yaml`, a line in ADR 0004 and a handler in the dispatcher.
+
+## Addendum 2026-11-13: current state
+
+The "Published to consumers" paragraph above omits that delivery-promise also reads `LoadDeparted` and `LoadArrived`. At
+`origin/develop` it consumes both, next to the five types the paragraph names (`internal/adapters/inbound/kafka/dispatch.go`, lines 97
+to 103). They feed its measured-transit read model (`OnLoadDeparted`, `OnLoadArrived`), and its handlers for `BookingMoved` and
+`BookingFailed` flag the assignment's promise AT_RISK (`OnBookingMoved`, `OnBookingFailed` in
+`internal/application/usecases/projections_transport.go`). The per-event readers are in `docs/docs/ddd/domain-events.md`.
