@@ -27,8 +27,13 @@ unleash:
     # differs. See HARNESS.md's mutation-testing section for the
     # tagless-switch-under-reports pitfall before assuming a low number
     # means missing tests.
-    # Measured with `make mutation` (single worker): shared 32/32, network 55/55, departure 59/59,
-    # schedule 73/73, load 35/35, volume 47/47 killed (efficacy 100 %, mutator coverage 100 % in each).
-    # Set strictly below the measurement and the same for every package.
-    efficacy: "90"
-    mutant-coverage: "90"
+    # Measured 2026-11-15 with gremlins v0.6.0 (`make mutation-full`, then the CI-equivalent
+    # `make mutation` per package), killed/total: shared 32/32, network 55/55, departure 59/59,
+    # schedule 73/75 plus 2 TIMED OUT loop mutants (pickup.go:47:32, plan.go:79:32; gremlins
+    # counts a timeout as detected), load 35/35, volume 47/47 (303 mutants): efficacy 100%,
+    # mutator coverage 100% in each, 0 lived, 0 not covered. 99 sits below all six.
+    # The values are plain integers ON PURPOSE: gremlins v0.6.0 reads them with a
+    # float64/int type assertion, so a quoted string ("99") is silently read as 0
+    # and the gate never fails.
+    efficacy: 99
+    mutant-coverage: 99
