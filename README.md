@@ -287,7 +287,7 @@ Git hooks are managed by [lefthook](https://github.com/evilmartians/lefthook)
 ## Tests
 
 - **Unit** — `go test ./...` (domain, use cases, handlers; `make test`).
-- **BDD acceptance** — godog/Gherkin over the real HTTP API in `features/` (`assignments`, `booking`, `loads`, `pickups`, `schedules`; `make bdd`).
+- **BDD acceptance** — godog/Gherkin over the real HTTP API in `features/` (11 feature files, 189 scenarios, 217 executed: the original `assignments`, `booking`, `loads`, `pickups`, `schedules` and the rule files `booking_rules`, `load_rules`, `pickup_rules`, `projection_rules`, `read_rules`, `schedule_rules`; `make bdd`).
 - **Integration** — testcontainers Postgres and Kafka: repositories, relay, middleware, consumers and a real-wiring test (`make integration`, build-tagged, needs only Docker).
 - **Coverage gate** — `make coverage`: ≥ 90% over `internal/domain` + `internal/application`.
 - **Mutation** — gremlins over every `internal/domain/<pkg>` (`make mutation`; the exhaustive `mutation-full`).
