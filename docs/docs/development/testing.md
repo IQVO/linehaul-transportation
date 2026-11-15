@@ -20,7 +20,7 @@ The quality gate is a set of `make` targets that mirror the jobs of `.github/wor
 | Integration | `*_integration_test.go` with `//go:build integration`: repositories, the relay, the idempotency middleware, the consumers and the real-wiring test `cmd/api/e2e_integration_test.go` | Real Postgres and Kafka started by testcontainers; no `DATABASE_URL`, no docker compose, no `t.Skip` gate | `make integration` (needs Docker) |
 | Contract | `internal/adapters/outbound/repocontract` | One behavioural suite for every repository, run against the in-memory adapter (`memory_test.go`) and the Postgres adapter (`postgres_integration_test.go`) so the double cannot drift | part of `make test` and `make integration` |
 | Coverage gate | `Makefile` `coverage` | 90 % statement coverage over `internal/domain/...` and `internal/application/...` | `make coverage` |
-| Mutation | `.gremlins.yaml` | gremlins v0.6.0 over every `internal/domain/<pkg>`, one worker, timeout coefficient 30, efficacy and mutant-coverage thresholds both 90; the measured result in the file is 100 % killed for `shared`, `network`, `departure`, `schedule`, `load` and `volume` | `make mutation` (fast, per package), `make mutation-full` (exhaustive over `./internal/domain`) |
+| Mutation | `.gremlins.yaml` | gremlins v0.6.0 over every `internal/domain/<pkg>`, one worker, timeout coefficient 30, efficacy and mutant-coverage thresholds both 99 (plain integers: a quoted string is not enforced by gremlins); the measured result in the file (2026-11-15) is 100 % efficacy and mutant coverage for `shared`, `network`, `departure`, `schedule`, `load` and `volume` | `make mutation` (fast, per package), `make mutation-full` (exhaustive over `./internal/domain`) |
 | Fitness | `internal/architecture/*_test.go` | The architecture as executable rules (below) | `make arch-test` |
 | Vulnerabilities | `govulncheck` | Known CVEs in dependencies and the standard library | `make vuln` |
 | Web | `web/` | `npm run lint`, `npx tsc -b`, `npm test` (vitest), `npm run build` for the `linehaul_mfe` console remote | CI job `web` |
@@ -85,7 +85,7 @@ The documentation site is built by its own workflow, `.github/workflows/docs.yml
 
 ## Writing tests here
 
-- A new domain rule gets a unit test and must keep mutation efficacy above 90 %; a surviving mutant usually means a missing assertion, not a missing line.
+- A new domain rule gets a unit test and must keep mutation efficacy above 99 %; a surviving mutant usually means a missing assertion, not a missing line.
 - A new REST behaviour gets a scenario in the matching `features/*.feature` and, if it touches persistence, a case in the repository contract so both adapters are held to it.
 - A new published event type must appear in `apis/asyncapi.yaml` or `TestEventCatalogueMatchesContract` fails.
 - Integration tests must boot their own containers; a test that needs an environment variable or skips itself fails `TestPostgresIntegrationTestsUseTestcontainers`.
