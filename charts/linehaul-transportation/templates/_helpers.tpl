@@ -200,3 +200,18 @@ own Deployment + Service pair, pinned by app.kubernetes.io/component=a2a
 {{- define "linehaul-transportation.a2aFullname" -}}
 {{- include "linehaul-transportation.fullname" . }}-a2a
 {{- end -}}
+
+{{/*
+Comma-joined names of this chart's enabled KongPlugins, for the
+konghq.com/plugins annotation on every HTTPRoute this chart renders.
+Empty string (annotation omitted) when none are enabled.
+*/}}
+{{- define "linehaul-transportation.kongPluginNames" -}}
+{{- $names := list -}}
+{{- range $name, $cfg := .Values.kongPlugins -}}
+{{- if $cfg.enabled -}}
+{{- $names = append $names (printf "%s-%s" (include "linehaul-transportation.fullname" $) $name) -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $names -}}
+{{- end -}}

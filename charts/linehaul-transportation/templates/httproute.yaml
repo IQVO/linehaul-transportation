@@ -5,6 +5,10 @@ metadata:
   name: {{ include "linehaul-transportation.fullname" . }}
   labels:
     {{- include "linehaul-transportation.labels" . | nindent 4 }}
+  {{- with include "linehaul-transportation.kongPluginNames" . }}
+  annotations:
+    konghq.com/plugins: {{ . | quote }}
+  {{- end }}
 spec:
   parentRefs:
     {{- range .Values.gatewayApi.parentRefs }}
