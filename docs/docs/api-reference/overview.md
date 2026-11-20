@@ -47,8 +47,8 @@ See the [Quickstart](/docs/overview/quickstart) for real responses.
   `idempotency-key-required`, `idempotency-key-invalid`, `idempotency-key-reused` and `internal-error`. Statuses and remedies are on
   [Troubleshooting](/docs/operations/troubleshooting#rest-problem-types).
 - **`Idempotency-Key`.** Required on every POST (`400 idempotency-key-required` when absent, `idempotency-key-invalid` unless 1 to 128 printable ASCII characters); the key is global, not per route. `PUT` is idempotent by method and takes none. The
-  same key with the same method, path and body replays the first stored response (2xx and 4xx) with `Idempotency-Replayed: true` for 24 hours; the same key with a different request is
-  `409 idempotency-key-reused`. 5xx answers are not stored.
+  same key with the same method, path and body replays the first stored response with `Idempotency-Replayed: true` for 24 hours when it is final for the request (a 2xx, or a refusal that is a function of the request alone: `malformed-request`, `request-body-too-large`, `invalid-departure-times`, `overlapping-slots`, `validation-failed`, `load-over-capacity`, `load-already-exists`); the same key with a different request is
+  `409 idempotency-key-reused` while the key holds a stored answer. 5xx answers are not stored, and neither is a refusal that depends on state another request can change (`concurrent-update`, `departure-closed`, `departure-full`, `illegal-transition`, `lane-closed`, `not-found`, `package-already-loaded`): the key is released and a retry under it runs again (ADR 0015).
 - **Optimistic concurrency.** Aggregates carry a version; a write that loses a race is `409 concurrent-update`.
 - **Time.** Every instant is RFC 3339 in UTC. Lane-schedule slots are wall-clock `HH:MM` times: cutoff and departure in the time zone of the lane's origin node, arrival in
   the zone of its destination node.

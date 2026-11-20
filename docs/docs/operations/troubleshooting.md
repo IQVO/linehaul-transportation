@@ -66,7 +66,7 @@ All errors are RFC 9457 `application/problem+json` with `type = https://retailne
 | 400 | `invalid-limit`, `invalid-cursor`, `unknown-query-parameter` | `GET /departures` with a `limit` outside 1..500, a cursor that was not issued by the service, or a retired paging parameter (`after`, `offset`, `nextToken`) | Follow `nextCursor` as returned; send only the declared parameters |
 | 500 | `internal-error` | Unexpected failure; 5xx are never stored for replay | Log line with `request_id` and `trace_id`; retry with the same key |
 
-An equal request with the same key replays the first stored answer (2xx and 4xx) and adds `Idempotency-Replayed: true`; keys live 24 h.
+An equal request with the same key replays the first stored answer and adds `Idempotency-Replayed: true`; keys live 24 h. A 2xx and a refusal that is a function of the request alone (`malformed-request`, `request-body-too-large`, `invalid-departure-times`, `overlapping-slots`, `validation-failed`, `load-over-capacity`, `load-already-exists`) are stored: fix the request and send it with a **new** key. A refusal that depends on state another request can change (`concurrent-update`, `departure-closed`, `departure-full`, `illegal-transition`, `lane-closed`, `not-found`, `package-already-loaded`) is not stored (ADR 0015): the key is released, so the same key can be sent again once the state allows it, and a different body under a released key is a new request. A 5xx is never stored either.
 
 ## MCP and A2A
 

@@ -13,6 +13,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/claudioed/linehaul-transportation/internal/application/ports"
 )
 
 // The middleware's Postgres-backed paths (claim against a real table, replay
@@ -301,29 +303,51 @@ func TestRunFreshStoresA2xxAndCommitsTheSavepoint(t *testing.T) {
 	}
 }
 
-func TestRunFreshStoresA4xxButDropsItsWrites(t *testing.T) {
+// runRefusal drives runFresh with a handler that answers through the production
+// error writer (or by hand when answer is nil) and returns the recorder and the tx.
+func runRefusal(answer func(http.ResponseWriter, *http.Request)) (*httptest.ResponseRecorder, *fakeTx) {
 	tx := &fakeTx{}
-	k := &keyed{route: "POST /loads", bind: func(ctx context.Context, _ pgx.Tx) context.Context { return ctx }, next: handlerOf(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusConflict)
-	})}
+	k := &keyed{route: "POST /loads", bind: func(ctx context.Context, _ pgx.Tx) context.Context { return ctx }, next: handlerOf(answer)}
 	r := httptest.NewRequest(http.MethodPost, "/loads", nil)
 	rec := httptest.NewRecorder()
-
 	k.runFresh(r.Context(), rec, r, tx, "key-1")
+	return rec, tx
+}
 
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rec.Code)
+func TestRunFreshStoresAFinalRefusalButDropsItsWrites(t *testing.T) {
+	rec, tx := runRefusal(func(w http.ResponseWriter, r *http.Request) { writeError(w, r, errMalformedRequest) })
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 	if len(tx.execSQL) != 1 || !strings.HasPrefix(tx.execSQL[0], "UPDATE idempotency_keys") {
-		t.Fatalf("a 4xx must still be stored, execs = %q", tx.execSQL)
+		t.Fatalf("a FINAL refusal must be stored, execs = %q", tx.execSQL)
 	}
 	if tx.commits != 1 {
-		t.Fatalf("commits = %d, want the stored 4xx committed", tx.commits)
+		t.Fatalf("commits = %d, want the stored refusal committed", tx.commits)
 	}
 	// The savepoint (begun inside runFresh) is rolled back by settle because
-	// the handler answered 4xx; the outer transaction commits.
+	// the refusal is not an OUTCOME; the outer transaction commits.
 	if tx.begins != 1 {
 		t.Fatalf("savepoints = %d, want 1", tx.begins)
+	}
+}
+
+func TestRunFreshReleasesARetryableRefusalAndAnUnclassifiedOne(t *testing.T) {
+	for name, answer := range map[string]func(http.ResponseWriter, *http.Request){
+		"retryable":    func(w http.ResponseWriter, r *http.Request) { writeError(w, r, ports.ErrConcurrentUpdate) },
+		"unclassified": func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusConflict) },
+	} {
+		rec, tx := runRefusal(answer)
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("%s: status = %d, want 409", name, rec.Code)
+		}
+		if len(tx.execSQL) != 0 {
+			t.Fatalf("%s: the refusal must not be stored, execs = %q", name, tx.execSQL)
+		}
+		if tx.commits != 0 || tx.rollbacks != 1 {
+			t.Fatalf("%s: commits = %d, rollbacks = %d, want the whole transaction rolled back once, so the key is free", name, tx.commits, tx.rollbacks)
+		}
 	}
 }
 

@@ -34,6 +34,7 @@ reuse was `422`, a key limit of 200 characters and an unpaged `{departures}` lis
   characters of anything printable); a missing key is 400 `idempotency-key-required`. The replay header is `Idempotency-Replayed: true`
   (only on a replay). The key row, the aggregate and the outbox rows still commit in ONE Postgres transaction (SAVEPOINT design of ADR
   0006): this store already met the requirement, nothing else changed in it.
+  *Pointer 2026-11-20: the replay of every refusal that ADR 0006 describes is superseded in part by [ADR 0015](./0015-every-problem-type-has-a-replay-class.md): a RETRYABLE refusal is not stored and releases the key.*
 - **Pagination (R7).** `GET /departures` takes `limit` (1-500, default 100) and the opaque `cursor`, orders by `(cutoffAt, departureId)`
   with a keyset predicate `(cutoff_at, id) > ($1, $2)` in both the Postgres and the in-memory repository, and answers
   `{items,nextCursor}` (`nextCursor` absent on the last page). The cursor is the fleet `page` package format
