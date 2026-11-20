@@ -117,7 +117,7 @@ which is why a write is accepted while Kafka is down.
 
 ## How a write travels
 
-1. A REST command passes the Idempotency-Key middleware, which opens the transaction and a savepoint.
+1. A REST command passes the Idempotency-Key middleware, which opens the transaction and a savepoint. A 2xx commits with the stored answer; a refusal is stored (FINAL) or released with the whole transaction rolled back (RETRYABLE), by the replay class of its problem type (ADR 0015).
 2. The use case loads the aggregate, calls its domain method (which checks the invariants and returns events), saves it with a version check.
 3. The events are encoded to CloudEvents and inserted into `outbox_events` in the same transaction; commit.
 4. The relay claims unpublished rows (`FOR UPDATE SKIP LOCKED`), writes them to `retailnetwork.linehaul-transportation.events` or `.analytics`

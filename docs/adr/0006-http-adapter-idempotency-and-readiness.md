@@ -40,6 +40,7 @@ a dependency-aware `/readyz`, a NUL guard and a graceful shutdown.
    a 5xx or a panic rolls everything back and is never stored. Concurrent requests with one key race on
    `INSERT ... ON CONFLICT DO NOTHING`; the loser blocks until the winner resolves and then replays. Keys live 24 h: every keyed
    write first deletes the expired rows (index on `created_at`), so an expired key is a new key.
+   *Pointer 2026-11-20: "a 4xx ... is stored" and "the loser ... then replays" are superseded in part by [ADR 0015](./0015-every-problem-type-has-a-replay-class.md): a RETRYABLE refusal is rolled back with the key row like a 5xx, and a copy that waited on it runs the use case itself.*
 6. **Probes.** `/healthz` is liveness: 200 `{"status":"ok"}` while the process serves. `/readyz` is 200 `{"status":"ready"}` only
    while the drain gate is open AND Postgres answers a ping AND a Kafka broker answers a metadata request. The Kafka request names
    NO topics (an empty, non-nil list), so it never creates a topic and does not need the output topic to exist; it dials a fresh
@@ -55,4 +56,5 @@ a dependency-aware `/readyz`, a NUL guard and a graceful shutdown.
 
 - A client retrying a timed-out write with the same key never duplicates a load, a schedule or an event.
 - A 4xx is replayed too: after fixing the cause the client sends a new key.
+  *Pointer 2026-11-20: superseded in part by [ADR 0015](./0015-every-problem-type-has-a-replay-class.md): only a refusal whose class is FINAL is stored and replayed; a RETRYABLE refusal releases the key and a retry under it runs again.*
 - The real middleware is proven on Postgres by `internal/adapters/inbound/http/idempotency_integration_test.go`.

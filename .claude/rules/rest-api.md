@@ -28,10 +28,13 @@ handlers in `handlers.go`, wired in `cmd/api/main.go`):
   `concurrent-update` 409, `validation-failed` 422; one slug per model `Err...` (`departure-full`, `departure-closed`, `lane-closed`,
   `package-already-loaded`, `load-over-capacity`, `load-already-exists`, `invalid-departure-times`, `overlapping-slots`); an unmapped error is
   an opaque 500 `internal-error`. A new `Err` needs a catalogue row, an OpenAPI mention and a case in `handlers_test.go`.
-- **Idempotency-Key** is required on all nine state-changing routes (`idempotency.go`): a global key, fingerprint
-  `sha256(method, path, body)`; same key + same request replays the first response (header `Idempotency-Replayed: true`), same key + other
-  request is 409 `idempotency-key-reused`, missing key 400 `idempotency-key-required`, a key not 1-128 printable ASCII 400 `idempotency-key-invalid`,
-  keys live 24 h in `idempotency_keys`. A new state-changing route registers through `Server.keyed`, never `r.Post`.
+- **Idempotency-Key** is required on all eight POST routes (`idempotency.go`; `PUT .../capacity` is idempotent by method and unkeyed): a global key,
+  fingerprint `sha256(method, path, body)`; same key + same request replays the first response when it is final for the request (a 2xx or a FINAL
+  refusal; header `Idempotency-Replayed: true`); a RETRYABLE refusal releases the key and a retry runs again (ADR 0015: every problem type declares its
+  `replay` class on its catalogue entry in `errors.go`, a new one without a class fails `TestEveryProblemTypeDeclaresAReplayClass`, and the class table of
+  ADR 0015 and the RETRYABLE list of the `Idempotency-Key` text in `apis/openapi.yaml` are held equal to the catalogue); same key + other request is 409
+  `idempotency-key-reused` while the key holds a stored answer, missing key 400 `idempotency-key-required`, a key not 1-128 printable ASCII 400
+  `idempotency-key-invalid`, keys live 24 h in `idempotency_keys`. A new state-changing route registers through `Server.keyed`, never `r.Post`.
 - **NUL** (U+0000) is rejected before anything else (`nul.go`): 404 `resource-not-found` in the path, 400 `malformed-request` elsewhere. A body
   above 64 KiB is 413 `request-body-too-large`.
 - Bodies are decoded strictly (`decodeBody`): unknown fields are 400 `malformed-request`; a value the domain refuses is 422.
