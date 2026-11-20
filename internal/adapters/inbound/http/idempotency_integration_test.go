@@ -49,16 +49,24 @@ func (r reply) slug() string {
 	return p.Type[strings.LastIndex(p.Type, "/")+1:]
 }
 
-func newDBAPI(t *testing.T) dbAPI {
+func newDBAPI(t *testing.T) dbAPI { return newDBAPIWith(t, nil) }
+
+// newDBAPIWith is newDBAPI with a hook that may wrap a dependency (a repository
+// that loses the optimistic lock, say) before the service is built.
+func newDBAPIWith(t *testing.T, tweak func(*usecases.Deps)) dbAPI {
 	t.Helper()
 	pool := pgtest.NewPool(t)
-	svc := usecases.New(usecases.Deps{
+	deps := usecases.Deps{
 		UoW: postgres.NewUnitOfWork(pool), Departures: postgres.NewDepartureRepo(pool), Schedules: postgres.NewScheduleRepo(pool),
 		Loads: postgres.NewLoadRepo(pool), Nodes: postgres.NewNodeViewRepo(pool), Lanes: postgres.NewLaneViewRepo(pool),
 		Volumes: postgres.NewVolumeRepo(pool), Inbox: postgres.NewProcessedEventRepo(pool),
 		Outbox: postgres.NewEventOutbox(postgres.NewOutboxRepo(pool), wire.Encoder{NewID: uuid.NewString}),
 		Clock:  clock.System{}, IDs: ids.UUID{},
-	})
+	}
+	if tweak != nil {
+		tweak(&deps)
+	}
+	svc := usecases.New(deps)
 	srv := httptest.NewServer(inbound.NewRouter(&inbound.Server{Service: svc, Idempotency: inbound.RequireIdempotencyKey(pool, pgtx.With)}, nil, ""))
 	t.Cleanup(srv.Close)
 	return dbAPI{t: t, pool: pool, srv: srv}
