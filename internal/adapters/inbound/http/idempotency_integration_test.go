@@ -168,22 +168,45 @@ func TestTheSameKeyOnAnotherResourceIsKeyReusedGlobally(t *testing.T) {
 	}
 }
 
-func TestAFourXXIsStoredAndItsWritesAreRolledBack(t *testing.T) {
+func TestAFinalRefusalIsStoredAndItsWritesAreRolledBack(t *testing.T) {
 	d := newDBAPI(t)
 	d.seed("dep-1")
-	d.do("POST", "/departures/dep-1/cancellations", `{"reason":"weather"}`, "cancel-1")
-	// A load on a CANCELLED departure is refused (409); the refusal is stored.
+	d.do("POST", "/loads", loadBody("dep-1"), "open-1")
+	// A second load for the same departure is refused (409 load-already-exists,
+	// FINAL: a load is never deleted); the refusal is stored.
 	first := d.do("POST", "/loads", loadBody("dep-1"), "key-409")
 	second := d.do("POST", "/loads", loadBody("dep-1"), "key-409")
-	if first.status != nethttp.StatusConflict || first.slug() != "illegal-transition" || second.status != first.status || second.raw != first.raw ||
+	if first.status != nethttp.StatusConflict || first.slug() != "load-already-exists" || second.status != first.status || second.raw != first.raw ||
 		second.header.Get(inbound.IdempotencyReplayedHeader) != "true" {
 		t.Fatalf("first %d %s, replay %d %s: want the stored 409", first.status, first.raw, second.status, second.raw)
 	}
 	if first.header.Get("Content-Type") != "application/problem+json" || second.header.Get("Content-Type") != "application/problem+json" {
 		t.Fatalf("problem content types: %q %q", first.header.Get("Content-Type"), second.header.Get("Content-Type"))
 	}
+	if n := d.count(`SELECT count(*) FROM loads`); n != 1 {
+		t.Fatalf("a refused request left %d loads, want only the first", n)
+	}
+	if n := d.keyRows("key-409"); n != 1 {
+		t.Fatalf("key rows = %d, want the stored refusal", n)
+	}
+}
+
+func TestARetryableRefusalIsNotStoredAndItsWritesAreRolledBack(t *testing.T) {
+	d := newDBAPI(t)
+	d.seed("dep-1")
+	d.do("POST", "/departures/dep-1/cancellations", `{"reason":"weather"}`, "cancel-1")
+	// A load on a CANCELLED departure is refused (409 illegal-transition,
+	// RETRYABLE: the state may move); nothing is stored.
+	first := d.do("POST", "/loads", loadBody("dep-1"), "key-409")
+	second := d.do("POST", "/loads", loadBody("dep-1"), "key-409")
+	if first.status != nethttp.StatusConflict || first.slug() != "illegal-transition" || second.status != first.status || wasReplayed(second) {
+		t.Fatalf("first %d %s, second %d %s replayed=%v: want the refusal answered twice, never replayed", first.status, first.raw, second.status, second.raw, wasReplayed(second))
+	}
 	if n := d.count(`SELECT count(*) FROM loads`); n != 0 {
 		t.Fatalf("a refused request left %d loads", n)
+	}
+	if n := d.keyRows("key-409"); n != 0 {
+		t.Fatalf("key rows = %d, want 0: the key is released", n)
 	}
 }
 

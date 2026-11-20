@@ -55,10 +55,15 @@ type Idempotency func(route string) func(http.Handler) http.Handler
 //     rolled back, the blocked insert succeeds instead and does the work).
 //   - The handler runs inside a SAVEPOINT of that transaction, bound into its
 //     context (TxBinder), so the key, the aggregates and the outbox rows of a
-//     2xx commit together. A 4xx rolls the handler's writes back to the
-//     savepoint but is still stored (a repeat answers the same). A 5xx or a panic
-//     rolls everything back and is never stored, so the same key can retry the
-//     real work.
+//     2xx commit together. What happens to a refusal is its replay class
+//     (ADR 0015), declared on the catalogue entry of its problem type and marked
+//     on the capture by writeError: a FINAL refusal rolls the handler's writes
+//     back to the savepoint and is stored and replayed; an OUTCOME refusal
+//     commits them with the stored answer; a RETRYABLE refusal, a refusal with no
+//     class, a 5xx and a panic roll everything back, key row included, and are
+//     never stored, so the same key runs the real work again. A request that
+//     waits on the key meanwhile finds no row and runs the handler itself.
+//   - Another body, path or method under a RELEASED key is a new request.
 //   - Keys live 24 hours. Every keyed write first purges the expired rows
 //     (indexed on created_at); an expired key is simply a new key.
 func RequireIdempotencyKey(pool *pgxpool.Pool, bind TxBinder) Idempotency {
@@ -206,29 +211,6 @@ func replayContentType(status int) string {
 	return "application/json"
 }
 
-// capture records the handler's response so it can be persisted and committed
-// BEFORE anything reaches the client.
-type capture struct {
-	header http.Header
-	code   int
-	body   bytes.Buffer
-}
-
-func (c *capture) Header() http.Header { return c.header }
-
-func (c *capture) WriteHeader(code int) {
-	if c.code == 0 {
-		c.code = code
-	}
-}
-
-func (c *capture) Write(b []byte) (int, error) {
-	if c.code == 0 {
-		c.code = http.StatusOK
-	}
-	return c.body.Write(b)
-}
-
 // runFresh handles a genuinely new key: run the handler in a savepoint, record
 // the outcome in the same transaction, commit, and only then write to the
 // client.
@@ -257,13 +239,17 @@ func (k *keyed) runFresh(ctx context.Context, w http.ResponseWriter, r *http.Req
 	if rec.code == 0 {
 		rec.code = http.StatusOK
 	}
-	if rec.code >= http.StatusInternalServerError {
-		// A server failure is never stored: everything rolls back so the same
-		// key can retry the real work.
+	v := rec.verdict()
+	if v == releaseKey {
+		// A 5xx and a RETRYABLE refusal are never stored: everything rolls back,
+		// the key row included, so the same key runs the real work again. The
+		// key is free before the client reads the answer.
+		_ = tx.Rollback(context.WithoutCancel(ctx))
+		finished = true
 		flush(w, rec)
 		return
 	}
-	if err := k.settle(ctx, tx, sp, key, rec); err != nil {
+	if err := k.settle(ctx, tx, sp, key, v, rec); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -271,14 +257,15 @@ func (k *keyed) runFresh(ctx context.Context, w http.ResponseWriter, r *http.Req
 	flush(w, rec)
 }
 
-// settle keeps the handler's writes on a success and drops them on a 4xx, then
-// stores the outcome and commits.
-func (k *keyed) settle(ctx context.Context, tx, sp pgx.Tx, key string, rec *capture) error {
+// settle keeps the handler's writes when the verdict says they commit with the
+// stored answer (a 2xx, an OUTCOME refusal) and drops them for a FINAL refusal,
+// which is stored alone; then it stores the outcome and commits.
+func (k *keyed) settle(ctx context.Context, tx, sp pgx.Tx, key string, v verdict, rec *capture) error {
 	var err error
-	if rec.code >= http.StatusBadRequest {
-		err = sp.Rollback(ctx)
-	} else {
+	if v == storeAndKeep {
 		err = sp.Commit(ctx)
+	} else {
+		err = sp.Rollback(ctx)
 	}
 	if err != nil {
 		return err

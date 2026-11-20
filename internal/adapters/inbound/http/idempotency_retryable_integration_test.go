@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	nethttp "net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	inbound "github.com/claudioed/linehaul-transportation/internal/adapters/inbound/http"
 	"github.com/claudioed/linehaul-transportation/internal/application/ports"
@@ -158,5 +160,84 @@ func TestPackageAlreadyLoadedIsReleasedWhenTheOtherLoadDeparts(t *testing.T) {
 	again := d.do("POST", "/loads/"+two+"/packages", `{"trackingNumber":"TN-1"}`, "key-pal")
 	if again.status != nethttp.StatusOK || !wasReplayed(again) || again.raw != ok.raw {
 		t.Fatalf("third = %d %s replayed=%v, want the stored 200 replayed", again.status, again.raw, wasReplayed(again))
+	}
+}
+
+// gatedSave is a departure repository whose FIRST Save waits for release and
+// then loses the optimistic lock; every later Save succeeds. It records how many
+// Saves ran and the most that ran at once.
+type gatedSave struct {
+	ports.DepartureRepository
+	calls, running, peak atomic.Int32
+	entered, release     chan struct{}
+}
+
+func (g *gatedSave) Save(ctx context.Context, d *departure.Departure) error {
+	n := g.calls.Add(1)
+	cur := g.running.Add(1)
+	defer g.running.Add(-1)
+	for p := g.peak.Load(); cur > p && !g.peak.CompareAndSwap(p, cur); p = g.peak.Load() {
+	}
+	if n == 1 {
+		close(g.entered)
+		<-g.release
+		return ports.ErrConcurrentUpdate
+	}
+	return g.DepartureRepository.Save(ctx, d)
+}
+
+// TestACopyWaitingOnARetryableFirstRunsTheUseCaseItself: copies of a request that
+// arrive while the first one is in flight wait on the key's unique index. The
+// first ends RETRYABLE and rolls back, so the key row is gone: the next copy is a
+// fresh request and runs the use case itself (never replays the released refusal,
+// never runs alongside the first); the copies behind it replay ITS answer.
+func TestACopyWaitingOnARetryableFirstRunsTheUseCaseItself(t *testing.T) {
+	g := &gatedSave{entered: make(chan struct{}), release: make(chan struct{})}
+	d := newDBAPIWith(t, func(deps *usecases.Deps) {
+		g.DepartureRepository = deps.Departures
+		deps.Departures = g
+	})
+	d.seed("dep-1")
+
+	const copies = 6
+	replies := make([]reply, copies)
+	var wg sync.WaitGroup
+	start := func(i int) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			replies[i] = d.do("POST", "/departures/dep-1/cancellations", `{"reason":"weather"}`, "key-wait")
+		}()
+	}
+	start(0)
+	<-g.entered
+	for i := 1; i < copies; i++ {
+		start(i)
+	}
+	time.Sleep(300 * time.Millisecond) // let the copies reach the key's unique index
+	close(g.release)
+	wg.Wait()
+
+	var refused, fresh, replays int
+	for _, r := range replies {
+		switch {
+		case r.status == nethttp.StatusConflict && r.slug() == "concurrent-update" && !wasReplayed(r):
+			refused++
+		case r.status == nethttp.StatusOK && !wasReplayed(r):
+			fresh++
+		case r.status == nethttp.StatusOK && wasReplayed(r):
+			replays++
+		default:
+			t.Fatalf("unexpected reply %d %s replayed=%v", r.status, r.raw, wasReplayed(r))
+		}
+	}
+	if refused != 1 || fresh != 1 || replays != copies-2 {
+		t.Fatalf("refused %d fresh %d replayed %d, want 1, 1 and %d", refused, fresh, replays, copies-2)
+	}
+	if g.calls.Load() != 2 || g.peak.Load() != 1 {
+		t.Fatalf("the use case saved %d times, at most %d at once, want 2 and 1", g.calls.Load(), g.peak.Load())
+	}
+	if n := d.keyRows("key-wait"); n != 1 {
+		t.Fatalf("key rows = %d, want 1 (the stored 200)", n)
 	}
 }
