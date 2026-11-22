@@ -174,7 +174,7 @@ picked up by the consumers. The chart's `otel.*` values render the env.
 
 Contract: [`apis/openapi.yaml`](apis/openapi.yaml). No authentication. Errors are RFC 9457 `application/problem+json` (`type` is a slug such as
 `not-found`, `illegal-transition`, `concurrent-update`, `validation-failed`, `departure-full`, `package-already-loaded`).
-Every `POST` needs an `Idempotency-Key` header (1 to 128 printable ASCII characters, one per logical submit; `PUT` is idempotent by method and unkeyed): a repeat of the same request replays the first response for 24 hours with `Idempotency-Replayed: true`, and the same key on a different request is `409 idempotency-key-reused`. `GET /departures` is keyset-paged: `limit` (1-500, default 100) and the opaque `cursor`, answered as `{"items":[...],"nextCursor":"..."}`; any other query parameter is `400 unknown-query-parameter` (ADR 0012).
+Every `POST` needs an `Idempotency-Key` header (1 to 128 printable ASCII characters, one per logical submit; `PUT` is idempotent by method and unkeyed): a repeat of the same request replays the first response for 24 hours with `Idempotency-Replayed: true` when that response is final for the request (a 2xx, or a refusal that is a function of the request alone: `malformed-request`, `request-body-too-large`, `invalid-departure-times`, `overlapping-slots`, `validation-failed`, `load-over-capacity`, `load-already-exists`); a refusal that depends on state another request can change (`concurrent-update`, `departure-closed`, `departure-full`, `illegal-transition`, `lane-closed`, `not-found`, `package-already-loaded`) is not stored: the key is released and a retry under it runs again (ADR 0015); the same key on a different request is `409 idempotency-key-reused` while the key holds a stored answer. `GET /departures` is keyset-paged: `limit` (1-500, default 100) and the opaque `cursor`, answered as `{"items":[...],"nextCursor":"..."}`; any other query parameter is `400 unknown-query-parameter` (ADR 0012).
 
 | Method and path | Operation |
 | --- | --- |
@@ -287,7 +287,7 @@ Git hooks are managed by [lefthook](https://github.com/evilmartians/lefthook)
 ## Tests
 
 - **Unit** — `go test ./...` (domain, use cases, handlers; `make test`).
-- **BDD acceptance** — godog/Gherkin over the real HTTP API in `features/` (`assignments`, `booking`, `loads`, `pickups`, `schedules`; `make bdd`).
+- **BDD acceptance** — godog/Gherkin over the real HTTP API in `features/` (11 feature files, 189 scenarios, 217 executed: the original `assignments`, `booking`, `loads`, `pickups`, `schedules` and the rule files `booking_rules`, `load_rules`, `pickup_rules`, `projection_rules`, `read_rules`, `schedule_rules`; `make bdd`).
 - **Integration** — testcontainers Postgres and Kafka: repositories, relay, middleware, consumers and a real-wiring test (`make integration`, build-tagged, needs only Docker).
 - **Coverage gate** — `make coverage`: ≥ 90% over `internal/domain` + `internal/application`.
 - **Mutation** — gremlins over every `internal/domain/<pkg>` (`make mutation`; the exhaustive `mutation-full`).

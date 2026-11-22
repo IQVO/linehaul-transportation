@@ -49,6 +49,7 @@ flowchart LR
     LH -. "2 DepartureCancelled" .-> DP
     LH -. "2 DepartureCancelled" .-> OS
     LH -. "3 BookingMoved or BookingFailed per assignment" .-> OS
+    LH -. "3 BookingMoved or BookingFailed per assignment" .-> DP
     LH -. "4 DepartureCapacityChanged of the new pickup" .-> DP
 ```
 
@@ -56,7 +57,7 @@ Source: `internal/application/usecases/departures.go`, `booking.go`, `consumers.
 
 1. A planner cancels a SCHEDULED departure, or node-topology suspends or retires a vendor node (all its future pickups are cancelled).
 2. `DepartureCancelled` lets delivery-promise revise promises that rested on it.
-3. Each assignment booked on it is rebooked on the next pickup from the same origin (`BookingMoved`) or fails (`BookingFailed`).
+3. Each assignment booked on it is rebooked on the next pickup from the same origin (`BookingMoved`) or fails (`BookingFailed`). delivery-promise treats either as a risk to that assignment's promise.
 4. The receiving pickup's capacity change is published.
 
 ## Scenario 3: a load travels
@@ -67,20 +68,23 @@ flowchart LR
     LH[linehaul-transportation]
     ST[shipping-and-tracking]
     LM[last-mile-delivery]
+    DP[delivery-promise]
     OP -- "1 OpenLoad" --> LH
     OP -- "2 AddPackage per tracking number" --> LH
     OP -- "3 CloseLoad" --> LH
     OP -- "4 DispatchLoad" --> LH
     LH -. "5 LoadDeparted" .-> ST
+    LH -. "5 LoadDeparted" .-> DP
     OP -- "6 ReceiveLoad" --> LH
     LH -. "7 LoadArrived" .-> ST
     LH -. "7 LoadArrived" .-> LM
+    LH -. "7 LoadArrived" .-> DP
 ```
 
-Source: `internal/application/usecases/loads.go`; consumers in `shipping-and-tracking/internal/adapters/inbound/kafka/handlers.go` and `last-mile-delivery/internal/adapters/inbound/kafka/consumers.go`.
+Source: `internal/application/usecases/loads.go`; consumers in `shipping-and-tracking/internal/adapters/inbound/kafka/handlers.go`, `last-mile-delivery/internal/adapters/inbound/kafka/consumers.go` and `delivery-promise/internal/adapters/inbound/kafka/dispatch.go`.
 
 1 to 3 are silent for other contexts (`LoadClosed` goes to the analytics topic). 4 records the departure of the trip and publishes `LoadDeparted` with the tracking numbers. 6 records the arrival at the destination node and
-publishes `LoadArrived`, which last-mile-delivery uses to induct packages when the destination is a delivery station.
+publishes `LoadArrived`, which last-mile-delivery uses to induct packages when the destination is a delivery station. delivery-promise pairs `LoadDeparted` and `LoadArrived` of one load into a measured-transit read model.
 
 ## Scenario 4: reading departures
 

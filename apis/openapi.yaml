@@ -468,9 +468,16 @@ components:
         Client-generated key (1 to 128 printable ASCII characters), one per
         logical submit. A repeat of the same request (method, path, body) with
         the same key within 24 hours returns the first response (status and
-        body, header Idempotency-Replayed: true); a refusal (4xx) is replayed
-        too, a server failure (5xx) is not stored. The same key with another
-        request is 409 idempotency-key-reused.
+        body, header Idempotency-Replayed: true) when that response is final
+        for the request: a 2xx, or a refusal that is a function of the request
+        alone. A refusal that depends on state another request can change is
+        not stored and the key is released, so a retry under the same key runs
+        again (with another body it is a new request). These problem types are
+        not stored and release the key: concurrent-update, departure-closed,
+        departure-full, illegal-transition, lane-closed, not-found,
+        package-already-loaded. A server failure (5xx) is never stored. While a
+        key holds a stored answer, the same key with another request is 409
+        idempotency-key-reused.
       schema:
         type: string
         minLength: 1
@@ -515,7 +522,7 @@ components:
         type: string
   headers:
     IdempotencyReplayed:
-      description: Present, with the value true, only on a response replayed from a stored first execution.
+      description: Present, with the value true, only on a response replayed from a stored first answer (a 2xx or a refusal that is final for the request; a 5xx and a refusal that depends on state another request can change are never stored).
       schema:
         type: string
         enum: ['true']

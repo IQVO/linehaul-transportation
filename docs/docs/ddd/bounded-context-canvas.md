@@ -81,5 +81,5 @@ It does **not** decide which node or path fulfils a shipment group, what date th
 ## 11. Open questions
 
 - Outbox backlog, consumer lag and dead letters are not metered or alerted.
-- `BookingFailed` is received by `order-sourcing` and changes no state there; follow-up for a failed booking is outside this context.
+- `BookingFailed` is received by `order-sourcing`, which changes no state, and by `delivery-promise`, which flags the assignment's promise AT_RISK; the assignment stays FAILED here and any further follow-up for a failed booking is outside this context.
 - Route optimisation, carrier procurement and freight cost are not modelled.

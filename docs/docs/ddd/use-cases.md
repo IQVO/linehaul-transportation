@@ -14,7 +14,7 @@ event, the `processed_events` claim. Reads (`ListDepartures`, `GetDeparture`) ar
 
 ## Conventions
 
-- **Idempotency.** Every REST POST needs an `Idempotency-Key` and replays the first stored answer for 24 h. Every consumer claims
+- **Idempotency.** Every REST POST needs an `Idempotency-Key` and replays the first stored answer for 24 h (a 2xx or a refusal that is final for the request); a refusal that depends on state another request can change (`concurrent-update`, `not-found`, `illegal-transition`, `package-already-loaded` and the others of ADR 0015) and a 5xx are not stored, so a retry under the same key runs again. Every consumer claims
   `(consumer, event_id)` in `processed_events`, so a redelivered CloudEvent changes nothing.
 - **Optimistic concurrency.** Aggregates carry a `version`; a lost race is `concurrent-update` (409). Departure and ExpectedVolume writes inside a
   transaction share one working set (`bookingSet`) so a departure keeps one version line.

@@ -32,7 +32,7 @@ The chart also has an optional `frontend` component (nginx serving the `linehaul
 - **REST on `:8080`** (`internal/adapters/inbound/http/server.go`): the operations of `apis/openapi.yaml` on a chi router: `POST /lane-schedules`,
   `POST /lane-schedules/{laneId}/retirements`, `POST /departures/{departureId}/cancellations`, `PUT /departures/{departureId}/capacity`, `POST /loads`,
   `POST /loads/{loadId}/packages`, `POST /loads/{loadId}/closures`, `POST /loads/{loadId}/dispatches`, `POST /loads/{loadId}/receipts`, `GET /departures`, `GET /departures/{departureId}`. Every
-  POST sits behind the Idempotency-Key middleware (24 h replay window, `idempotency_keys` table). No auth, by fleet decision.
+  POST sits behind the Idempotency-Key middleware (24 h replay window, `idempotency_keys` table; a RETRYABLE refusal leaves no row, ADR 0015, so a key row count of 0 after such a refusal is correct). No auth, by fleet decision.
 - **Transactional-outbox relay** (`internal/adapters/outbound/outbox/relay.go`): drains unpublished `outbox_events` rows to Kafka every
   `OUTBOX_RELAY_INTERVAL` (batch 100, `FOR UPDATE SKIP LOCKED` claims).
 - **Three Kafka consumers** (`internal/adapters/inbound/kafka/consumer.go`), each under its own mandatory consumer group.

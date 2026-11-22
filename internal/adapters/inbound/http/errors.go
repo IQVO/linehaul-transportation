@@ -48,24 +48,29 @@ var (
 // problemCatalogue maps every typed error to its problem, in match order (the
 // specific errors before the general ErrValidation / ErrIllegalTransition).
 // Slugs and statuses are the table of ADR 0002.
+//
+// replay is the replay class of the problem (replay_class.go, ADR 0015): what the
+// Idempotency-Key middleware does with the answer. Every entry declares one; the
+// reason of each is in the class table of ADR 0015.
 var problemCatalogue = []struct {
-	err error
-	p   problem
+	err    error
+	p      problem
+	replay replayClass
 }{
-	{errMalformedRequest, problem{http.StatusBadRequest, "malformed-request", "Malformed request"}},
-	{errTooLarge, problem{http.StatusRequestEntityTooLarge, "request-body-too-large", "Request body is too large"}},
-	{ports.ErrNotFound, problem{http.StatusNotFound, "not-found", "Not found"}},
-	{departure.ErrInvalidDepartureTimes, problem{http.StatusUnprocessableEntity, "invalid-departure-times", "Departure times are invalid"}},
-	{schedule.ErrOverlappingSlots, problem{http.StatusUnprocessableEntity, "overlapping-slots", "Slots of a lane overlap"}},
-	{shared.ErrValidation, problem{http.StatusUnprocessableEntity, "validation-failed", "Validation failed"}},
-	{departure.ErrDepartureFull, problem{http.StatusConflict, "departure-full", "Departure is full"}},
-	{departure.ErrLaneClosed, problem{http.StatusConflict, "lane-closed", "Lane is closed"}},
-	{departure.ErrDepartureClosed, problem{http.StatusConflict, "departure-closed", "Departure is closed"}},
-	{load.ErrPackageAlreadyLoaded, problem{http.StatusConflict, "package-already-loaded", "Package is already on an active load"}},
-	{load.ErrLoadOverCapacity, problem{http.StatusConflict, "load-over-capacity", "Load is over capacity"}},
-	{load.ErrLoadAlreadyExists, problem{http.StatusConflict, "load-already-exists", "The departure already has a load"}},
-	{shared.ErrIllegalTransition, problem{http.StatusConflict, "illegal-transition", "Illegal state transition"}},
-	{ports.ErrConcurrentUpdate, problem{http.StatusConflict, "concurrent-update", "The resource was modified by another request; re-fetch it and retry"}},
+	{errMalformedRequest, problem{http.StatusBadRequest, "malformed-request", "Malformed request"}, replayFinal},
+	{errTooLarge, problem{http.StatusRequestEntityTooLarge, "request-body-too-large", "Request body is too large"}, replayFinal},
+	{ports.ErrNotFound, problem{http.StatusNotFound, "not-found", "Not found"}, replayRetryable},
+	{departure.ErrInvalidDepartureTimes, problem{http.StatusUnprocessableEntity, "invalid-departure-times", "Departure times are invalid"}, replayFinal},
+	{schedule.ErrOverlappingSlots, problem{http.StatusUnprocessableEntity, "overlapping-slots", "Slots of a lane overlap"}, replayFinal},
+	{shared.ErrValidation, problem{http.StatusUnprocessableEntity, "validation-failed", "Validation failed"}, replayFinal},
+	{departure.ErrDepartureFull, problem{http.StatusConflict, "departure-full", "Departure is full"}, replayRetryable},
+	{departure.ErrLaneClosed, problem{http.StatusConflict, "lane-closed", "Lane is closed"}, replayRetryable},
+	{departure.ErrDepartureClosed, problem{http.StatusConflict, "departure-closed", "Departure is closed"}, replayRetryable},
+	{load.ErrPackageAlreadyLoaded, problem{http.StatusConflict, "package-already-loaded", "Package is already on an active load"}, replayRetryable},
+	{load.ErrLoadOverCapacity, problem{http.StatusConflict, "load-over-capacity", "Load is over capacity"}, replayFinal},
+	{load.ErrLoadAlreadyExists, problem{http.StatusConflict, "load-already-exists", "The departure already has a load"}, replayFinal},
+	{shared.ErrIllegalTransition, problem{http.StatusConflict, "illegal-transition", "Illegal state transition"}, replayRetryable},
+	{ports.ErrConcurrentUpdate, problem{http.StatusConflict, "concurrent-update", "The resource was modified by another request; re-fetch it and retry"}, replayRetryable},
 }
 
 // problemError is an error that already carries its problem (the adapter's own
@@ -90,4 +95,21 @@ func problemFor(err error) problem {
 		}
 	}
 	return internalProblem
+}
+
+// replayOf returns the replay class of the first catalogue entry err matches:
+// the class is read from the same entry as its problem. An error the catalogue
+// does not know (an unmapped 5xx) and the adapter's own paged-GET problems, which
+// no keyed route answers, have none.
+func replayOf(err error) replayClass {
+	var pe problemError
+	if errors.As(err, &pe) {
+		return replayUnset
+	}
+	for _, entry := range problemCatalogue {
+		if errors.Is(err, entry.err) {
+			return entry.replay
+		}
+	}
+	return replayUnset
 }

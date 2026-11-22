@@ -25,7 +25,7 @@ flowchart LR
     OS -- "Published Language: assignments<br/>Customer/Supplier" --> LH
     ST -- "Published Language: labels<br/>Conformist" --> LH
     LH -- "Published Language: departures, bookings" --> OS
-    LH -- "Published Language: departures" --> DP
+    LH -- "Published Language: departures, bookings, loads" --> DP
     LH -- "Published Language: LoadDeparted, LoadArrived" --> ST
     LH -- "Published Language: LoadArrived" --> LM
     LH -. "Open Host Service: REST, MCP, A2A" .-> AG
@@ -44,7 +44,7 @@ Source: `docs/adr/0001-linehaul-transportation-bounded-context.md`, `docs/adr/00
 | order-sourcing -> linehaul-transportation | Published Language (`FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled`); **Customer/Supplier**: order-sourcing names the pickup departure, this context books it | Consumer **built** (group `ORDER_SOURCING_CONSUMER_GROUP`) |
 | shipping-and-tracking -> linehaul-transportation | Published Language (`LabelIssued`, `LabelVoided`); **Conformist** | Consumer **built** (group `SHIPPING_AND_TRACKING_CONSUMER_GROUP`) |
 | linehaul-transportation -> order-sourcing | Published Language on `retailnetwork.linehaul-transportation.events`; order-sourcing reads departures, capacity and cancellations and receives `BookingMoved` | Producer **built**; order-sourcing consumer **built** (`LINEHAUL_TRANSPORTATION_CONSUMER_GROUP`); `BookingFailed` is received and changes no state there |
-| linehaul-transportation -> delivery-promise | Published Language (`DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`); delivery-promise builds witness paths from them | Producer **built**; consumer **built** |
+| linehaul-transportation -> delivery-promise | Published Language (`DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed`, `LoadDeparted`, `LoadArrived`); delivery-promise builds witness paths from the departure events, flags a promise AT_RISK on a moved or failed booking and pairs the two load events into measured transit | Producer **built**; consumer **built** |
 | linehaul-transportation -> shipping-and-tracking | Published Language (`LoadDeparted`, `LoadArrived`) | Producer **built**; consumer **built** |
 | linehaul-transportation -> last-mile-delivery | Published Language (`LoadArrived`) | Producer **built**; consumer **built** |
 | linehaul-transportation -> analytics readers | Published Language on `retailnetwork.linehaul-transportation.analytics` | Producer **built**; no consumer found in the sibling repositories |

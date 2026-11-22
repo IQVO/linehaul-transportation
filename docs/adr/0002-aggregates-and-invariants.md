@@ -217,3 +217,10 @@ characters from `A-Za-z0-9._:-`; tracking numbers are 1..64 non-control characte
 
 - Every behaviour above has a table-driven test in its package; mutation thresholds are set per package (`.gremlins.yaml`).
 - The aggregate packages stay free of I/O; clock and ids are passed in.
+
+## Addendum 2026-11-13: current state
+
+A6 names the roll interval `HORIZON_ROLL_INTERVAL`. The variable the code reads is `GENERATE_INTERVAL` (optional, default `1h`, a Go
+duration or plain seconds): `cmd/api/config.go` (`defaultGenerateInterval`, `durationVar(env, "GENERATE_INTERVAL", ...)`),
+`cmd/api/main.go` (`horizonRoll` runs `GenerateDepartures` now and then every interval) and the chart value `config.generateInterval`.
+`HORIZON_ROLL_INTERVAL` is read nowhere in the code. The behaviour A6 describes is unchanged.

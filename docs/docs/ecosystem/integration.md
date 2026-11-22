@@ -72,7 +72,7 @@ Consumers found in sibling repositories on `develop` (read from their code, not 
 
 | Consumer | Types it handles from this service | Use |
 | --- | --- | --- |
-| `delivery-promise` | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled` | Builds its departures read model; revises promises on a cancellation |
+| `delivery-promise` | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed`, `LoadDeparted`, `LoadArrived` | Builds its departures read model; revises promises on a cancellation and flags a promise AT_RISK on a moved or failed booking; pairs the load events into measured transit |
 | `order-sourcing` | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`; `BookingFailed` is received but changes no state | Pickup availability, rebooked assignments |
 | `shipping-and-tracking` | `LoadDeparted`, `LoadArrived` | Package timeline (pickup departure, station arrival) |
 | `last-mile-delivery` | `LoadArrived` | Inducts packages into delivery waves when the destination is a delivery station |
