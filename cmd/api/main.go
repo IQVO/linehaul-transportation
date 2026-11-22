@@ -190,7 +190,7 @@ func horizonRoll(service *usecases.Service, interval time.Duration, logger *slog
 		for {
 			report, err := service.GenerateDepartures(ctx)
 			if err != nil && !errors.Is(err, context.Canceled) {
-				logger.ErrorContext(ctx, "horizon roll failed", "error", err)
+				logger.ErrorContext(ctx, "horizon roll failed", "error", sanitizeErr(err))
 			} else if err == nil {
 				logger.InfoContext(ctx, "horizon roll", "scheduled", report.Scheduled, "failed", report.Failed)
 			}
