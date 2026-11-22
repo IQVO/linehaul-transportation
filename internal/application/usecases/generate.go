@@ -64,7 +64,7 @@ func (r *GenerateReport) add(n int, err error) {
 
 func (s *Service) logFailure(ctx context.Context, what, id string, err error) {
 	if err != nil {
-		s.Logger.WarnContext(ctx, "generate departures failed", "what", what, "id", id, "error", err)
+		s.Logger.WarnContext(ctx, "generate departures failed", "what", sanitizeLog(what), "id", sanitizeLog(id), "error", sanitizeErr(err))
 	}
 }
 
@@ -97,7 +97,7 @@ func (s *Service) generateLane(ctx context.Context, laneID string) (int, error) 
 		}
 		specs, err := schedule.PlanLane(sc, lane, origin, dest, s.Clock.Now())
 		if err != nil {
-			s.Logger.InfoContext(ctx, "lane skipped", "lane", laneID, "reason", err.Error())
+			s.Logger.InfoContext(ctx, "lane skipped", "lane", sanitizeLog(laneID), "reason", sanitizeLog(err.Error()))
 			return nil, nil
 		}
 		evs, err := s.scheduleSpecs(ctx, specs)
@@ -135,7 +135,7 @@ func (s *Service) scheduleSpecs(ctx context.Context, specs []departure.Spec) ([]
 		}
 		d, evs, err := departure.Schedule(spec, err == nil && lane.Open, now)
 		if err != nil {
-			s.Logger.InfoContext(ctx, "departure not scheduled", "departure", spec.ID, "lane", spec.LaneID, "reason", err.Error())
+			s.Logger.InfoContext(ctx, "departure not scheduled", "departure", sanitizeLog(string(spec.ID)), "lane", sanitizeLog(spec.LaneID), "reason", sanitizeLog(err.Error()))
 			continue
 		}
 		if err := s.Departures.Save(ctx, d); err != nil {
