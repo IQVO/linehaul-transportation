@@ -28,10 +28,16 @@ type workerExit struct {
 	err  error
 }
 
-// startWorkers runs every worker on a context that stopWorkers cancels, and
-// returns the channel their exits arrive on.
+// startWorkers runs every worker on a context that only stopWorkers cancels,
+// and returns the channel their exits arrive on. The context keeps parent's
+// values but NOT its cancellation: derived from parent, a caller-ctx
+// cancellation (the integration tests stop run that way) would stop the
+// workers at the same instant as serveUntilSignal's sigCtx — before the drain
+// — and their clean return would race sigCtx.Done() and be reported as
+// "worker ... stopped". An exit can then arrive while serving only from a
+// worker that stopped on its own — a death.
 func startWorkers(parent context.Context, ws []worker, logger *slog.Logger) (<-chan workerExit, func()) {
-	ctx, cancel := context.WithCancel(parent)
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
 	exits := make(chan workerExit, len(ws))
 	var wg sync.WaitGroup
 	for _, w := range ws {
